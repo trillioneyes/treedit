@@ -9,9 +9,6 @@ data Context = C String [Tree] [Tree]
 newTree :: Tree
 newTree = T "" []
 
-emptyContext :: Context
-emptyContext = C "" [] []
-
 type Cursor = ([Context], Tree)
 
 up :: Cursor -> Cursor

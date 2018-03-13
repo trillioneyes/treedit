@@ -13,7 +13,7 @@ type Cursor = ([Context], Tree)
 
 up :: Cursor -> Cursor
 up ([], v) = ([], T "" [v])
-up ((C tag l r:cs), v) = (cs, T tag (reverse l ++ [v] ++ r))
+up (C tag l r:cs, v) = (cs, T tag (reverse l ++ [v] ++ r))
 
 down :: Cursor -> Cursor
 down (cs, T tag (child:children)) = (C tag [] children:cs, child)
@@ -37,13 +37,29 @@ delete :: Cursor -> Cursor
 delete (C tag l (r:rs):cs, _) = (C tag l rs:cs, r)
 delete (C tag (l:ls) []:cs, _) = (C tag ls []:cs, l)
 delete (C tag [] []:cs, _) = (cs, T tag [])
+delete ([], _) = ([], newTree)
 
 rename :: String -> Cursor -> Cursor
 rename tag (cs, T _ vals) = (cs, T tag vals)
 
+(!>>) :: a -> (a -> b) -> b
 (!>>) = flip ($)
 
 dataCursor :: Cursor
 dataCursor = ([], newTree) !>> rename "TOPLEVEL" !>> next !>> rename "leaf" !>>
   next !>> rename "branch" !>> next !>> rename "another leaf" !>> previous !>>
   down !>> rename "subtree" !>> down !>> rename "deep leaf" !>> up !>> insert
+
+stitch :: Cursor -> Tree
+stitch ([], t) = t
+stitch (C tag l r:cs, t) = stitch (cs, T tag (reverse l ++ [t] ++ r))
+
+treeLines :: Tree -> [String]
+treeLines (T tag []) = ["'" ++ tag ++ "'"]
+treeLines (T tag children) = ("'" ++ tag ++ "':") : map ("  "++) (children >>= treeLines)
+
+printCursor :: Cursor -> String
+printCursor = unlines . treeLines . stitch
+
+main :: IO ()
+main = putStr (printCursor dataCursor)

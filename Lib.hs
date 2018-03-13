@@ -61,5 +61,24 @@ treeLines (T tag children) = ("'" ++ tag ++ "':") : map ("  "++) (children >>= t
 printCursor :: Cursor -> String
 printCursor = unlines . treeLines . stitch
 
+command :: String -> Cursor -> Cursor
+command line = case words line of
+  ["up"] -> up
+  ["down"] -> down
+  ["next"] -> next
+  ["previous"] -> previous
+  ["rename", name] -> rename name
+  ["insert"] -> insert
+  ["delete"] -> delete
+  _ -> id
+
+edit :: Cursor -> IO Cursor
+edit c = do
+  putStr (printCursor c)
+  line <- getLine
+  case line of
+    "" -> return c
+    _ -> edit (command line c)
+
 main :: IO ()
-main = putStr (printCursor dataCursor)
+main = edit ([], newTree) >> return ()

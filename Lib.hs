@@ -67,7 +67,8 @@ command line = case words line of
   ["down"] -> down
   ["next"] -> next
   ["previous"] -> previous
-  ["rename", name] -> rename name
+  "rename" : name -> rename (unwords name)
+  "releaf" : name -> up . rename (unwords name) . down
   ["insert"] -> insert
   ["delete"] -> delete
   _ -> id

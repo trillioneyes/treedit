@@ -22,16 +22,19 @@ down (cs, T tag []) = (C tag [] []:cs, newTree)
 next :: Cursor -> Cursor
 next (C tag l (r:rs):cs, t) = (C tag (t:l) rs:cs, r)
 next (C tag l []:cs, t) = (C tag (t:l) []:cs, newTree)
-next c = insert c
+next c = c
 
 previous :: Cursor -> Cursor
 previous (C tag (l:ls) r:cs, t) = (C tag ls (t:r):cs, l)
 previous (C tag [] r:cs, t) = (C tag [] (t:r):cs, newTree)
-previous c = insert c
+previous c = c
 
-insert :: Cursor -> Cursor
-insert (C tag l r:cs, t) = (C tag l (t:r):cs, newTree)
-insert ([], T tag vals) = ([C tag [] vals], newTree)
+insert :: String -> Cursor -> Cursor
+insert newTag (C tag l r:cs, t) = (C tag l (t:r):cs, T newTag [])
+insert newTag ([], T tag vals) = ([C tag [] vals], T newTag [])
+
+insertPrev :: String -> Cursor -> Cursor
+insertPrev tag = insert tag . previous
 
 delete :: Cursor -> Cursor
 delete (C tag l (r:rs):cs, _) = (C tag l rs:cs, r)
@@ -44,11 +47,6 @@ rename tag (cs, T _ vals) = (cs, T tag vals)
 
 (!>>) :: a -> (a -> b) -> b
 (!>>) = flip ($)
-
-dataCursor :: Cursor
-dataCursor = ([], newTree) !>> rename "TOPLEVEL" !>> next !>> rename "leaf" !>>
-  next !>> rename "branch" !>> next !>> rename "another leaf" !>> previous !>>
-  down !>> rename "subtree" !>> down !>> rename "deep leaf" !>> up !>> insert
 
 stitch :: Cursor -> Tree
 stitch ([], t) = t
@@ -69,7 +67,8 @@ command line = case words line of
   ["previous"] -> previous
   "rename" : name -> rename (unwords name)
   "releaf" : name -> up . rename (unwords name) . down
-  ["insert"] -> insert
+  "insert" : name -> insert (unwords name)
+  "insertPrev" : name -> insertPrev (unwords name)
   ["delete"] -> delete
   _ -> id
 

@@ -9,44 +9,49 @@ data Context' tag = C tag [Tree' tag] [Tree' tag]
 type Tree = Tree' String
 type Context = Context' String
 
-newTree :: Tree
-newTree = T "" []
+newTree :: a -> Tree' a
+newTree a = T a []
 
 type Cursor' tag = ([Context' tag], Tree' tag)
 type Cursor = Cursor' String
 
-up :: Cursor -> Cursor
-up ([], v) = ([], T "" [v])
+up :: Cursor' a -> Cursor' a
+up ([], v) = ([], v)
 up (C tag l r:cs, v) = (cs, T tag (reverse l ++ [v] ++ r))
 
-down :: Cursor -> Cursor
-down (cs, T tag (child:children)) = (C tag [] children:cs, child)
-down (cs, T tag []) = (C tag [] []:cs, newTree)
+insertUp :: a -> Cursor' a -> Cursor' a
+insertUp tag (cs, t) = (cs, T tag [t])
 
-next :: Cursor -> Cursor
+down :: Cursor' a -> Cursor' a
+down (cs, T tag (child:children)) = (C tag [] children:cs, child)
+down (cs, T tag []) = (cs, newTree tag)
+
+insertDown :: a -> Cursor' a -> Cursor' a
+insertDown tag (cs, T tag' children) = (C tag' [] children:cs, newTree tag)
+
+next :: Cursor' a -> Cursor' a
 next (C tag l (r:rs):cs, t) = (C tag (t:l) rs:cs, r)
-next (C tag l []:cs, t) = (C tag (t:l) []:cs, newTree)
 next c = c
 
-previous :: Cursor -> Cursor
+insertNext :: a -> Cursor' a -> Cursor' a
+insertNext tag (C tag' l r:cs, t) = (C tag' (t:l) r:cs, newTree tag)
+insertNext _ ([], t) = ([], t)
+
+previous :: Cursor' a -> Cursor' a
 previous (C tag (l:ls) r:cs, t) = (C tag ls (t:r):cs, l)
-previous (C tag [] r:cs, t) = (C tag [] (t:r):cs, newTree)
 previous c = c
 
-insert :: String -> Cursor -> Cursor
-insert newTag (C tag l r:cs, t) = (C tag l (t:r):cs, T newTag [])
-insert newTag ([], T tag vals) = ([C tag [] vals], T newTag [])
+insertPrevious :: a -> Cursor' a -> Cursor' a
+insertPrevious tag (C tag' l r:cs, t) = (C tag' l (t:r):cs, newTree tag)
+insertPrevious _ ([], t) = ([], t)
 
-insertPrev :: String -> Cursor -> Cursor
-insertPrev tag = insert tag . previous
-
-delete :: Cursor -> Cursor
+delete :: Cursor' a -> Cursor' a
 delete (C tag l (r:rs):cs, _) = (C tag l rs:cs, r)
 delete (C tag (l:ls) []:cs, _) = (C tag ls []:cs, l)
 delete (C tag [] []:cs, _) = (cs, T tag [])
-delete ([], _) = ([], newTree)
+delete ([], _) = ([], newTree undefined)
 
-rename :: String -> Cursor -> Cursor
+rename :: a -> Cursor' a -> Cursor' a
 rename tag (cs, T _ vals) = (cs, T tag vals)
 
 (!>>) :: a -> (a -> b) -> b
@@ -91,8 +96,8 @@ command line = case words line of
   ["previous"] -> previous
   "rename" : name -> rename (unwords name)
   "releaf" : name -> up . rename (unwords name) . down
-  "insert" : name -> insert (unwords name)
-  "insertPrev" : name -> insertPrev (unwords name)
+  "insert" : name -> insertNext (unwords name)
+  "insertPrev" : name -> insertPrevious (unwords name)
   ["delete"] -> delete
   _ -> id
 
@@ -105,4 +110,4 @@ edit c = do
     _ -> edit (command line c)
 
 main :: IO ()
-main = edit ([], newTree) >> return ()
+main = edit ([], newTree "START HERE") >> return ()

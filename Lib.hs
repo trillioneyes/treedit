@@ -1,54 +1,75 @@
 {-# LANGUAGE GADTs #-}
 module Lib where
+import Control.Monad
+import Data.Maybe
 
 data Tree tag = T tag [Tree tag]
   deriving Show
-data Context tag = C tag [Tree tag] [Tree tag]
+data Context tag = C tag [Context tag] [Context tag]
   deriving Show
 
-newTree :: a -> Tree a
-newTree a = T a []
+type Cursor tag = ([Context tag], Context tag)
 
-type Cursor tag = ([Context tag], Tree tag)
+children :: Context a -> [Context a]
+children (C _ ls rs) = reverse ls ++ rs
+label :: Context a -> a
+label (C tag _ _) = tag
+addChild :: Context a -> Context a -> Context a
+addChild (C tag ls rs) new = C tag ls (new:rs)
+removeChild :: Context a -> Maybe (Context a)
+removeChild (C tag ls (_:rs)) = Just $ C tag ls rs
+removeChild _ = Nothing
+context :: a -> Context a
+context a = C a [] []
+seekLeft :: Context a -> Maybe (Context a)
+seekLeft (C tag (l:ls) rs) = Just $ C tag ls (l:rs)
+seekLeft _ = Nothing
+seekRight :: Context a -> Maybe (Context a)
+seekRight (C tag ls (r:rs)) = Just $ C tag (r:ls) rs
+seekRight _ = Nothing
+descend :: Context a -> Maybe (Context a)
+descend (C _ _ (r:_)) = Just r
+descend (C _ _ []) = Nothing
 
-up :: Cursor a -> Cursor a
-up ([], v) = ([], v)
-up (C tag l r:cs, v) = (cs, T tag (reverse l ++ [v] ++ r))
-
+up :: Cursor a -> Maybe (Cursor a)
+up ([], _) = Nothing
+up (c:cs, v) = Just (cs, addChild c v)
 insertUp :: a -> Cursor a -> Cursor a
-insertUp tag (cs, t) = (cs, T tag [t])
+insertUp tag (cs, t) = (cs, addChild (context tag) t)
 
-down :: Cursor a -> Cursor a
-down (cs, T tag (child:children)) = (C tag [] children:cs, child)
-down (cs, T tag []) = (cs, newTree tag)
-
+down :: Cursor a -> Maybe (Cursor a)
+down (cs, t) = do
+  t' <- descend t
+  c <- removeChild t
+  return (c:cs, t')
 insertDown :: a -> Cursor a -> Cursor a
-insertDown tag (cs, T tag' children) = (C tag' [] children:cs, newTree tag)
+insertDown tag (cs, c) = (c:cs, context tag)
 
-next :: Cursor a -> Cursor a
-next (C tag l (r:rs):cs, t) = (C tag (t:l) rs:cs, r)
-next c = c
+modifyUp :: Cursor a -> (Context a -> Maybe (Context a)) -> Maybe (Cursor a)
+modifyUp ([], _) _ = Nothing
+modifyUp (c:cs, t) f = do
+  c' <- f (addChild c t)
+  down (cs, c')
+modifyUp' :: Cursor a -> (Context a -> Context a) -> Maybe (Cursor a)
+modifyUp' c f = modifyUp c (return . f)
 
-insertNext :: a -> Cursor a -> Cursor a
-insertNext tag (C tag' l r:cs, t) = (C tag' (t:l) r:cs, newTree tag)
-insertNext _ ([], t) = ([], t)
+next :: Cursor a -> Maybe (Cursor a)
+next cur = modifyUp cur seekRight
+insertNext :: a -> Cursor a -> Maybe (Cursor a)
+insertNext tag cur = modifyUp' cur $ \con -> case seekRight con of
+  Nothing -> addChild con (context tag)
+  Just con' -> addChild con' (context tag)
 
-previous :: Cursor a -> Cursor a
-previous (C tag (l:ls) r:cs, t) = (C tag ls (t:r):cs, l)
-previous c = c
+previous :: Cursor a -> Maybe (Cursor a)
+previous cur = modifyUp cur seekLeft
+insertPrevious :: a -> Cursor a -> Maybe (Cursor a)
+insertPrevious tag cur = modifyUp' cur (`addChild` context tag)
 
-insertPrevious :: a -> Cursor a -> Cursor a
-insertPrevious tag (C tag' l r:cs, t) = (C tag' l (t:r):cs, newTree tag)
-insertPrevious _ ([], t) = ([], t)
-
-delete :: Cursor a -> Cursor a
-delete (C tag l (r:rs):cs, _) = (C tag l rs:cs, r)
-delete (C tag (l:ls) []:cs, _) = (C tag ls []:cs, l)
-delete (C tag [] []:cs, _) = (cs, T tag [])
-delete ([], _) = ([], newTree undefined)
+delete :: Cursor a -> Maybe (Cursor a)
+delete cur = modifyUp cur removeChild
 
 rename :: a -> Cursor a -> Cursor a
-rename tag (cs, T _ vals) = (cs, T tag vals)
+rename tag (cs, C _ ls rs) = (cs, C tag ls rs)
 
 (!>>) :: a -> (a -> b) -> b
 (!>>) = flip ($)
@@ -60,23 +81,27 @@ stylize [] = Text
 stylize _ = Tag
 
 styleTree :: Tree String -> Tree (Style, String)
-styleTree (T tag children) = T (stylize children, tag) (map styleTree children)
+styleTree (T tag cs) = T (stylize cs, tag) (map styleTree cs)
+styleContext :: Context String -> Context (Style, String)
+styleContext cur@(C tag ls rs) =
+  C (stylize (children cur), tag) (map styleContext ls) (map styleContext rs)
 
 styleCursor :: Cursor String -> Cursor (Style, String)
-styleCursor (cs, T tag children) =
-   (map boringStyle cs, T (Selected, tag) (map styleTree children))
-  where
-    boringStyle :: Context String -> Context (Style, String)
-    boringStyle (C t l r) = C (Tag, t) (map styleTree l) (map styleTree r)
+styleCursor (cs, C tag ls rs) =
+   (map styleContext cs,
+    C (Selected, tag) (map styleContext ls) (map styleContext rs))
+
+stitch' :: Context a -> Tree a
+stitch' c = T (label c) (map stitch' (children c))
 
 stitch :: Cursor a -> Tree a
-stitch ([], t) = t
-stitch (C tag l r:cs, t) = stitch (cs, T tag (reverse l ++ [t] ++ r))
+stitch cur = maybe (stitch' t) stitch (up cur) where
+  t = snd cur
 
 treeLines :: Tree (Style, String) -> [String]
-treeLines (T tag' children) = render tag' : (children >>= childLines)
+treeLines (T tag' cs) = render tag' : (cs >>= childLines)
   where
-    render (Selected, tag) = "**'" ++ tag ++ "':"
+    render (Selected, tag) = "'" ++ tag ++ "'**:"
     render (Tag, tag) = "'" ++ tag ++ "':"
     render (Text, tag) = "'" ++ tag ++ "'"
     childLines = map ("  "++) . treeLines
@@ -84,18 +109,19 @@ treeLines (T tag' children) = render tag' : (children >>= childLines)
 printCursor :: Cursor String -> String
 printCursor = unlines . treeLines . stitch . styleCursor
 
-command :: String -> Cursor String -> Cursor String
+command :: String -> Cursor String -> Maybe (Cursor String)
 command line = case words line of
   ["up"] -> up
   ["down"] -> down
   ["next"] -> next
   ["previous"] -> previous
-  "rename" : name -> rename (unwords name)
-  "releaf" : name -> up . rename (unwords name) . down
+  "rename" : name -> Just . rename (unwords name)
   "insert" : name -> insertNext (unwords name)
   "insertPrev" : name -> insertPrevious (unwords name)
+  "insertUp" : name -> Just . insertUp (unwords name)
+  "insertDown" : name -> Just . insertDown (unwords name)
   ["delete"] -> delete
-  _ -> id
+  _ -> Just
 
 edit :: Cursor String -> IO (Cursor String)
 edit c = do
@@ -103,7 +129,7 @@ edit c = do
   line <- getLine
   case line of
     "" -> return c
-    _ -> edit (command line c)
+    _ -> edit (fromMaybe c (command line c))
 
 main :: IO ()
-main = edit ([], newTree "START HERE") >> return ()
+main = void $ edit ([], context "START HERE")

@@ -1,7 +1,4 @@
-{-# LANGUAGE GADTs #-}
 module Lib where
-import Control.Monad
-import Data.Maybe
 
 data Tree tag = T tag [Tree tag]
   deriving Show
@@ -71,65 +68,9 @@ delete cur = modifyUp cur removeChild
 rename :: a -> Cursor a -> Cursor a
 rename tag (cs, C _ ls rs) = (cs, C tag ls rs)
 
-(!>>) :: a -> (a -> b) -> b
-(!>>) = flip ($)
-
-data Style = Text | Selected | Tag
-
-stylize :: [a] -> Style
-stylize [] = Text
-stylize _ = Tag
-
-styleTree :: Tree String -> Tree (Style, String)
-styleTree (T tag cs) = T (stylize cs, tag) (map styleTree cs)
-styleContext :: Context String -> Context (Style, String)
-styleContext cur@(C tag ls rs) =
-  C (stylize (children cur), tag) (map styleContext ls) (map styleContext rs)
-
-styleCursor :: Cursor String -> Cursor (Style, String)
-styleCursor (cs, C tag ls rs) =
-   (map styleContext cs,
-    C (Selected, tag) (map styleContext ls) (map styleContext rs))
-
 stitch' :: Context a -> Tree a
 stitch' c = T (label c) (map stitch' (children c))
 
 stitch :: Cursor a -> Tree a
 stitch cur = maybe (stitch' t) stitch (up cur) where
   t = snd cur
-
-treeLines :: Tree (Style, String) -> [String]
-treeLines (T tag' cs) = render tag' : (cs >>= childLines)
-  where
-    render (Selected, tag) = "'" ++ tag ++ "'**:"
-    render (Tag, tag) = "'" ++ tag ++ "':"
-    render (Text, tag) = "'" ++ tag ++ "'"
-    childLines = map ("  "++) . treeLines
-
-printCursor :: Cursor String -> String
-printCursor = unlines . treeLines . stitch . styleCursor
-
-command :: String -> Cursor String -> Maybe (Cursor String)
-command line = case words line of
-  ["up"] -> up
-  ["down"] -> down
-  ["next"] -> next
-  ["previous"] -> previous
-  "rename" : name -> Just . rename (unwords name)
-  "insert" : name -> insertNext (unwords name)
-  "insertPrev" : name -> insertPrevious (unwords name)
-  "insertUp" : name -> Just . insertUp (unwords name)
-  "insertDown" : name -> Just . insertDown (unwords name)
-  ["delete"] -> delete
-  _ -> Just
-
-edit :: Cursor String -> IO (Cursor String)
-edit c = do
-  putStr (printCursor c)
-  line <- getLine
-  case line of
-    "" -> return c
-    _ -> edit (fromMaybe c (command line c))
-
-main :: IO ()
-main = void $ edit ([], context "START HERE")

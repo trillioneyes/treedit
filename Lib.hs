@@ -1,15 +1,19 @@
 {-# LANGUAGE GADTs #-}
 module Lib where
 
-data Tree = T String [Tree]
+data Tree' tag = T tag [Tree' tag]
   deriving Show
-data Context = C String [Tree] [Tree]
+data Context' tag = C tag [Tree' tag] [Tree' tag]
   deriving Show
+
+type Tree = Tree' String
+type Context = Context' String
 
 newTree :: Tree
 newTree = T "" []
 
-type Cursor = ([Context], Tree)
+type Cursor' tag = ([Context' tag], Tree' tag)
+type Cursor = Cursor' String
 
 up :: Cursor -> Cursor
 up ([], v) = ([], T "" [v])
@@ -48,16 +52,36 @@ rename tag (cs, T _ vals) = (cs, T tag vals)
 (!>>) :: a -> (a -> b) -> b
 (!>>) = flip ($)
 
-stitch :: Cursor -> Tree
+data Style = Text | Selected | Tag
+
+stylize :: [a] -> Style
+stylize [] = Text
+stylize _ = Tag
+
+styleTree :: Tree -> Tree' (Style, String)
+styleTree (T tag children) = T (stylize children, tag) (map styleTree children)
+
+styleCursor :: Cursor -> Cursor' (Style, String)
+styleCursor (cs, T tag children) =
+   (map boringStyle cs, T (Selected, tag) (map styleTree children))
+  where
+    boringStyle :: Context -> Context' (Style, String)
+    boringStyle (C t l r) = C (Tag, t) (map styleTree l) (map styleTree r)
+
+stitch :: Cursor' a -> Tree' a
 stitch ([], t) = t
 stitch (C tag l r:cs, t) = stitch (cs, T tag (reverse l ++ [t] ++ r))
 
-treeLines :: Tree -> [String]
-treeLines (T tag []) = ["'" ++ tag ++ "'"]
-treeLines (T tag children) = ("'" ++ tag ++ "':") : map ("  "++) (children >>= treeLines)
+treeLines :: Tree' (Style, String) -> [String]
+treeLines (T tag' children) = render tag' : (children >>= childLines)
+  where
+    render (Selected, tag) = "**'" ++ tag ++ "':"
+    render (Tag, tag) = "'" ++ tag ++ "':"
+    render (Text, tag) = "'" ++ tag ++ "'"
+    childLines = map ("  "++) . treeLines
 
 printCursor :: Cursor -> String
-printCursor = unlines . treeLines . stitch
+printCursor = unlines . treeLines . stitch . styleCursor
 
 command :: String -> Cursor -> Cursor
 command line = case words line of

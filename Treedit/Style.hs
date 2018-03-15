@@ -40,7 +40,11 @@ pad (w, h) ss = take h . map (take w) $ infinite where
   infinite = map (++ infiniteLine) ss ++ repeat infiniteLine
 
 padV :: Int -> Layout -> [String]
-padV h x = take h (renderToLines x ++ repeat (replicate (width x) ' '))
+padV h x = let
+  diff = h - height x
+  prePad = replicate (ceiling (realToFrac diff/2)) (replicate (width x) ' ')
+  postPad = replicate (floor (realToFrac diff/2)) (replicate (width x) ' ')
+  in prePad ++ renderToLines x ++ postPad
 
 padH :: Int -> Layout -> [String]
 padH w x = map (take w) (zipWith (++) (renderToLines x) (replicate (height x) (repeat ' ')))
@@ -64,6 +68,14 @@ delimitedList :: String -> String -> String -> [Layout] -> Layout
 delimitedList open close sep =
   delimitedList' (lit open) (lit close) (lit sep)
 
+box :: Layout -> Layout
+box x =
+  hcat [verticalBarrier,
+        vcat [horizontalBarrier, x, horizontalBarrier],
+        verticalBarrier] where
+  verticalBarrier = vcat [lit "*", vcat $ replicate (height x) (lit "|"), lit "*"]
+  horizontalBarrier = hcat (replicate (width x) (lit "-"))
+
 basic :: Style
 basic text [] = hcat [lit "'", lit text, lit "'"]
 basic tag xs@(_:_) =
@@ -86,4 +98,4 @@ functionCall f xs
 selected :: Style -> Style
 selected sty tag xs = let
   body = sty tag xs
-  in hcat [body, vcat (replicate (height body) (lit "!!"))]
+  in box body

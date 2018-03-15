@@ -7,12 +7,10 @@ import Treedit.IO
 main :: IO ()
 main = do
   path:_ <- getArgs
-  maybeC <- readCursor path
-  case maybeC of
-    Nothing -> return ()
-    Just cur -> do
-      cur' <- edit cur
-      writeCursor path cur'
+  cur <- edit =<< getCursor path
+  writeCursor path cur
+getCursor :: String -> IO (Cursor String)
+getCursor path = fromMaybe (cursor "") `fmap` readCursor path
 
 command :: String -> Cursor String -> Maybe (Cursor String)
 command line = case words line of

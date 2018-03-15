@@ -12,6 +12,8 @@ data Context tag = C tag [Context tag] [Context tag]
   deriving Show
 
 type Cursor tag = ([Context tag], Context tag)
+cursor :: tag -> Cursor tag
+cursor t = ([], context t)
 
 children :: Context a -> [Context a]
 children (C _ ls rs) = reverse ls ++ rs

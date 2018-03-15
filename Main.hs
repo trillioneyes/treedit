@@ -36,10 +36,6 @@ edit c = do
     "save" -> return c
     _ -> edit (fromMaybe c (command line c))
 
-treeLayout :: Tree (Style, String) -> Layout
-treeLayout (T (sty, tag) cs) =
-  sty tag (map treeLayout cs)
-
 printCursor :: Cursor String -> String
 printCursor = render . treeLayout . stitch . styleCursor
 
@@ -47,12 +43,12 @@ stylize :: String -> Style
 stylize tag | all isAlphaNum tag = functionCall
             | otherwise = binOp
 
-styleContext :: Context String -> Context (Style, String)
+styleContext :: Context String -> Context (Selectable String)
 styleContext (C tag ls rs) =
   C styleTag (map styleContext ls) (map styleContext rs) where
-    styleTag = (stylize tag, tag)
+    styleTag = NoSelect tag
 
-styleCursor :: Cursor String -> Cursor (Style, String)
+styleCursor :: Cursor String -> Cursor (Selectable String)
 styleCursor (cs, C tag ls rs) =
    (map styleContext cs,
-    C (selected (stylize tag), tag) (map styleContext ls) (map styleContext rs))
+    C (Select tag) (map styleContext ls) (map styleContext rs))

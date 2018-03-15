@@ -1,5 +1,6 @@
 module Treedit.Style where
 import Data.List
+import Lib
 
 data Layout =
   Lit (Int, Int) String |
@@ -99,3 +100,19 @@ selected :: Style -> Style
 selected sty tag xs = let
   body = sty tag xs
   in box body
+
+data Selectable a = Select a | NoSelect a
+unSelectable :: Selectable a -> a
+unSelectable (Select a) = a
+unSelectable (NoSelect a) = a
+
+treeLayout :: Tree (Selectable String) -> Layout
+treeLayout (T (Select tag) ts) =
+  box . treeLayout $ T (NoSelect tag) ts
+treeLayout (T (NoSelect tag) []) = lit tag
+treeLayout (T (NoSelect "BIN_OP") (T tag _:ts)) =
+  binOp (unSelectable tag) (map treeLayout ts)
+treeLayout (T (NoSelect "CALL") (T tag _:ts)) =
+  functionCall (unSelectable tag) (map treeLayout ts)
+treeLayout (T _ (T tag _:ts)) =
+  basic (unSelectable tag) (map treeLayout ts)

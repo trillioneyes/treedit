@@ -2,6 +2,7 @@
 module Lib where
 import Data.Serialize(Serialize)
 import GHC.Generics(Generic)
+import Control.Applicative
 
 data Tree tag = T tag [Tree tag]
   deriving (Show, Generic)
@@ -51,7 +52,7 @@ modifyUp :: Cursor a -> (Context a -> Maybe (Context a)) -> Maybe (Cursor a)
 modifyUp ([], _) _ = Nothing
 modifyUp (c:cs, t) f = do
   c' <- f (addChild c t)
-  down (cs, c')
+  down (cs, c') <|> Just (cs, c')
 modifyUp' :: Cursor a -> (Context a -> Context a) -> Maybe (Cursor a)
 modifyUp' c f = modifyUp c (return . f)
 

@@ -57,10 +57,33 @@ render = unlines . renderToLines
 
 type Style = String -> [Layout] -> Layout
 
+delimitedList' :: Layout -> Layout -> Layout -> [Layout] -> Layout
+delimitedList' open close sep xs = hcat [open, hcat (intersperse sep xs), close]
+
+delimitedList :: String -> String -> String -> [Layout] -> Layout
+delimitedList open close sep =
+  delimitedList' (lit open) (lit close) (lit sep)
+
 basic :: Style
 basic text [] = hcat [lit "'", lit text, lit "'"]
-basic tag xs@(_:_) = hcat [basic tag [], lit ":", vcat xs]
+basic tag xs@(_:_) =
+  vcat [hcat [basic tag [], lit "("],
+        hcat [lit "  ", vcat xs],
+        lit ")"]
 
 binOp :: Style
 binOp op xs@(_:_:_) = hcat (intersperse (hcat [lit " ", lit op, lit " "]) xs)
 binOp op xs = basic op xs
+
+functionCall :: Style
+functionCall f [] = lit f
+functionCall f xs
+  | width (hcat xs) <= 35 = hcat [
+      lit f, delimitedList "(" ")" ", " xs
+    ]
+  | otherwise = basic f xs
+
+selected :: Style -> Style
+selected sty tag xs = let
+  body = sty tag xs
+  in hcat [body, vcat (replicate (height body) (lit "!!"))]

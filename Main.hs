@@ -1,8 +1,10 @@
 module Main (main) where
 import Lib
 import Data.Maybe(fromMaybe)
+import Data.Char
 import System.Environment
 import Treedit.IO
+import Treedit.Style
 
 main :: IO ()
 main = do
@@ -34,27 +36,23 @@ edit c = do
     "save" -> return c
     _ -> edit (fromMaybe c (command line c))
 
-treeLines :: Tree (Style, String) -> [String]
-treeLines (T tag' cs) = render tag' : (cs >>= childLines) where
-    render (Selected, tag) = "'" ++ tag ++ "'**:"
-    render (Tag, tag) = "'" ++ tag ++ "':"
-    render (Text, tag) = "'" ++ tag ++ "'"
-    childLines = map ("  "++) . treeLines
+treeLayout :: Tree (Style, String) -> Layout
+treeLayout (T (sty, tag) cs) =
+  sty tag (map treeLayout cs)
 
 printCursor :: Cursor String -> String
-printCursor = unlines . treeLines . stitch . styleCursor
+printCursor = render . treeLayout . stitch . styleCursor
 
-data Style = Text | Selected | Tag
-
-stylize :: [a] -> Style
-stylize [] = Text
-stylize _ = Tag
+stylize :: String -> Style
+stylize tag | all isAlphaNum tag = functionCall
+            | otherwise = binOp
 
 styleContext :: Context String -> Context (Style, String)
-styleContext cur@(C tag ls rs) =
-  C (stylize (children cur), tag) (map styleContext ls) (map styleContext rs)
+styleContext (C tag ls rs) =
+  C styleTag (map styleContext ls) (map styleContext rs) where
+    styleTag = (stylize tag, tag)
 
 styleCursor :: Cursor String -> Cursor (Style, String)
 styleCursor (cs, C tag ls rs) =
    (map styleContext cs,
-    C (Selected, tag) (map styleContext ls) (map styleContext rs))
+    C (selected (stylize tag), tag) (map styleContext ls) (map styleContext rs))

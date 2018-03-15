@@ -1,24 +1,31 @@
 module Main (main) where
 import Lib
-import Control.Monad(void)
 import Data.Maybe(fromMaybe)
+import System.Environment
 import Treedit.IO
 
 main :: IO ()
-main = void $ edit ([], context "START HERE")
+main = do
+  path:_ <- getArgs
+  maybeC <- readCursor path
+  case maybeC of
+    Nothing -> return ()
+    Just cur -> do
+      cur' <- edit cur
+      writeCursor path cur'
 
 command :: String -> Cursor String -> Maybe (Cursor String)
 command line = case words line of
-  ["up"] -> up
-  ["down"] -> down
-  ["next"] -> next
-  ["previous"] -> previous
-  "rename" : name -> Just . rename (unwords name)
-  "insert" : name -> insertNext (unwords name)
-  "insertPrev" : name -> insertPrevious (unwords name)
-  "insertUp" : name -> Just . insertUp (unwords name)
-  "insertDown" : name -> Just . insertDown (unwords name)
-  ["delete"] -> delete
+  ["k"] -> up
+  ["j"] -> down
+  ["l"] -> next
+  ["h"] -> previous
+  "r" : name -> Just . rename (unwords name)
+  "L" : name -> insertNext (unwords name)
+  "H" : name -> insertPrevious (unwords name)
+  "K" : name -> Just . insertUp (unwords name)
+  "J" : name -> Just . insertDown (unwords name)
+  ["x"] -> delete
   _ -> Just
 
 edit :: Cursor String -> IO (Cursor String)
@@ -26,12 +33,7 @@ edit c = do
   putStr (printCursor c)
   line <- getLine
   case line of
-    "" -> return c
-    "write" -> getLine >>= (`writeCursor` c) >> edit c
-    "read" -> do
-      path <- getLine
-      c' <- fromMaybe c `fmap` readCursor path
-      edit c'
+    "save" -> return c
     _ -> edit (fromMaybe c (command line c))
 
 treeLines :: Tree (Style, String) -> [String]

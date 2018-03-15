@@ -2,6 +2,7 @@ module Main (main) where
 import Lib
 import Control.Monad(void)
 import Data.Maybe(fromMaybe)
+import Treedit.IO
 
 main :: IO ()
 main = void $ edit ([], context "START HERE")
@@ -26,6 +27,11 @@ edit c = do
   line <- getLine
   case line of
     "" -> return c
+    "write" -> getLine >>= (`writeCursor` c) >> edit c
+    "read" -> do
+      path <- getLine
+      c' <- fromMaybe c `fmap` readCursor path
+      edit c'
     _ -> edit (fromMaybe c (command line c))
 
 treeLines :: Tree (Style, String) -> [String]

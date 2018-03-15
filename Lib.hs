@@ -1,7 +1,12 @@
+{-# LANGUAGE DeriveGeneric #-}
 module Lib where
+import Data.Serialize(Serialize)
+import GHC.Generics(Generic)
 
 data Tree tag = T tag [Tree tag]
-  deriving Show
+  deriving (Show, Generic)
+instance Serialize a => Serialize (Tree a) where
+
 data Context tag = C tag [Context tag] [Context tag]
   deriving Show
 
@@ -74,3 +79,9 @@ stitch' c = T (label c) (map stitch' (children c))
 stitch :: Cursor a -> Tree a
 stitch cur = maybe (stitch' t) stitch (up cur) where
   t = snd cur
+
+unstitch' :: Tree a -> Context a
+unstitch' (T tag cs) = C tag [] (map unstitch' cs)
+
+unstitch :: Tree a -> Cursor a
+unstitch t = ([], unstitch' t)

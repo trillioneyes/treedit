@@ -20,7 +20,8 @@ pseudoPy :: Rules
 pseudoPy = (justTag, [
     Clause "BIN_OP" binOp,
     Clause "CALL" functionCall,
-    Clause "DATA" rawData
+    invisible "ARRAY" (Just . array),
+    invisible "IF" pyIfStatement
   ])
 
 simple :: Rules
@@ -47,13 +48,33 @@ data Layout =
  deriving Show
 
 explicit :: FallbackRule
-explicit displayCode [] = explicit displayCode [lit "(())"]
+explicit displayCode [] = lit displayCode
 explicit displayCode (x:xs) =
  vcat [hcat [lit displayCode, lit ":"],
  hcat [lit "  ", vcat (x:xs)]]
 
 justTag :: FallbackRule
-justTag tag _ = lit tag
+justTag tag [] = lit tag
+justTag tag (x:xs) = explicit tag (x:xs)
+
+commas :: [Layout] -> [Layout]
+commas = intersperse (lit ", ")
+
+indent :: Layout -> Layout
+indent x = hcat [lit "  ", x]
+
+array :: [Layout] -> Layout
+array elems = fit [lit "[", fit' elems, lit "]"] where
+  fit = fitCat 4
+  fit' = fitCat' 35
+
+fitCat :: Int -> [Layout] -> Layout
+fitCat maxHeight xs | height (hcat xs) <= maxHeight = hcat xs
+                    | otherwise = vcat xs
+
+fitCat' :: Int -> [Layout] -> Layout
+fitCat' maxWidth xs | width (hcat xs) <= maxWidth = hcat (commas xs)
+                    | otherwise = indent $ vcat xs
 
 binOp :: Rule
 binOp _ (op:xs@(_:_:_)) =
@@ -67,6 +88,19 @@ functionCall _ (f:args) = Just $ cat [header, body, footer] where
  body = cat (intersperse (lit ", ") args)
  footer = lit ")"
 functionCall _ _ = Nothing
+
+pyIfStatement :: [Layout] -> Maybe Layout
+pyIfStatement [cond, ifThen] = Just $ vcat [
+    hcat [lit "if ", cond, lit ":"],
+    hcat [lit "  ", ifThen]
+  ]
+pyIfStatement [cond, ifThen, ifElse] = Just $ vcat [
+    hcat [lit "if ", cond, lit ":"],
+    hcat [lit "  ", ifThen],
+    hcat [lit "else:"],
+    hcat [lit "  ", ifElse]
+  ]
+pyIfStatement _ = Nothing
 
 rawData :: Rule
 rawData _ [dat] = Just dat

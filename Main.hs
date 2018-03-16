@@ -34,7 +34,7 @@ edit layOut c = do
   case line of
     "save" -> return c
     "view simple" -> edit Style.simple c
-    "view pretty" -> edit Style.pseudoPy c
+    "view py" -> edit Style.pseudoPy c
     _ -> edit layOut (fromMaybe c (command line c))
 
 printCursor :: Style.Rules -> Cursor String -> String

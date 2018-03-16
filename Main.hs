@@ -7,11 +7,16 @@ import qualified Treedit.Style as Style
 
 main :: IO ()
 main = do
-  path:_ <- getArgs
-  cur <- edit Style.pseudoPy =<< getCursor path
-  writeCursor path cur
-getCursor :: String -> IO (Cursor String)
-getCursor path = fromMaybe (cursor "") `fmap` readCursor path
+  args <- getArgs
+  cur <- edit Style.pseudoPy =<< loadCursor args
+  saveCursor args cur
+loadCursor :: [String] -> IO (Cursor String)
+loadCursor (path:_) = fromMaybe (cursor "") `fmap` readCursor path
+loadCursor [] = return $ cursor ""
+saveCursor :: [String] -> Cursor String -> IO ()
+saveCursor (path:_) = writeCursor path
+saveCursor [] = const (return ())
+
 
 command :: String -> Cursor String -> Maybe (Cursor String)
 command line = case words line of
@@ -32,7 +37,7 @@ edit layOut c = do
   putStr (printCursor layOut c)
   line <- getLine
   case line of
-    "save" -> return c
+    "exit" -> return c
     "view simple" -> edit Style.simple c
     "view py" -> edit Style.pseudoPy c
     _ -> edit layOut (fromMaybe c (command line c))

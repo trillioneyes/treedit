@@ -13,6 +13,10 @@ type FallbackRule = String -> [Layout] -> Layout
 invisible :: String -> ([Layout] -> Maybe Layout) -> RuleClause
 invisible displayCode f = Clause displayCode (\_ subs -> f subs)
 
+single :: (Layout -> Layout) -> [Layout] -> Maybe Layout
+single f [x] = Just $ f x
+single _ _ = Nothing
+
 render :: Rules -> Tree (Selectable String) -> String
 render rules = unlines . renderToLines . applyStyle rules
 
@@ -21,7 +25,15 @@ pseudoPy = (justTag, [
     Clause "BIN_OP" binOp,
     Clause "CALL" functionCall,
     invisible "ARRAY" (Just . array),
-    invisible "IF" pyIfStatement
+    invisible "IF" pyIfStatement,
+    invisible "PROTOTYPE" pyPrototype,
+    invisible "BLOCK" (Just . vcat),
+    invisible "ASSIGN" pyAssign,
+    invisible "STRING_LITERAL" (single quotes),
+    invisible "RETURN" (single returnStmt),
+    invisible "ATTRIBUTE" dottedPath,
+    invisible "VAR" (single var),
+    invisible "ARGS" (Just . parens . hcat . commas)
   ])
 
 simple :: Rules
@@ -59,6 +71,9 @@ justTag tag (x:xs) = explicit tag (x:xs)
 
 commas :: [Layout] -> [Layout]
 commas = intersperse (lit ", ")
+
+parens :: Layout -> Layout
+parens x = hcat [lit "(", x, lit ")"]
 
 indent :: Layout -> Layout
 indent x = hcat [lit "  ", x]
@@ -101,6 +116,30 @@ pyIfStatement [cond, ifThen, ifElse] = Just $ vcat [
     hcat [lit "  ", ifElse]
   ]
 pyIfStatement _ = Nothing
+
+pyPrototype :: [Layout] -> Maybe Layout
+pyPrototype [fName, fArgs, body] = Just $ vcat [
+    hcat [lit "def ", fName, fArgs, lit ":"],
+    indent body
+  ]
+pyPrototype _ = Nothing
+
+pyAssign :: [Layout] -> Maybe Layout
+pyAssign [name, value] = Just $ hcat [name, lit " = ", value]
+pyAssign _ = Nothing
+
+returnStmt :: Layout -> Layout
+returnStmt x = hcat [lit "return ", x]
+
+dottedPath :: [Layout] -> Maybe Layout
+dottedPath xs@(_:_:_) = Just $ hcat (intersperse (lit ".") xs)
+dottedPath _ = Nothing
+
+quotes :: Layout -> Layout
+quotes x = hcat [lit "\"", x, lit "\""]
+
+var :: Layout -> Layout
+var x = x
 
 rawData :: Rule
 rawData _ [dat] = Just dat

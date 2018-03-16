@@ -54,6 +54,9 @@ up ([], _) = Nothing
 up (c:cs, v) = Just (cs, addChild c v)
 insertUp :: a -> Cursor a -> Cursor a
 insertUp tag (cs, t) = (cs, addChild (context tag) t)
+moveUp :: Cursor a -> Maybe (Cursor a)
+moveUp (c:cs, t) = Just (t:cs, c)
+moveUp _ = Nothing
 
 down :: Cursor a -> Maybe (Cursor a)
 down (cs, t) = do

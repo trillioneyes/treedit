@@ -4,11 +4,78 @@ import Data.Maybe
 import Control.Applicative
 import Lib
 
+type Rules = (FallbackRule, [RuleClause])
+data RuleClause = Clause String Rule
+type Rule = String -> [Layout] -> Maybe Layout
+type FallbackRule = String -> [Layout] -> Layout
+
+-- | Create a clause that doesn't render its display code.
+invisible :: String -> ([Layout] -> Maybe Layout) -> RuleClause
+invisible displayCode f = Clause displayCode (\_ subs -> f subs)
+
+render :: Rules -> Tree (Selectable String) -> String
+render rules = unlines . renderToLines . applyStyle rules
+
+pseudoPy :: Rules
+pseudoPy = (justTag, [
+    Clause "BIN_OP" binOp,
+    Clause "CALL" functionCall,
+    Clause "DATA" rawData
+  ])
+
+simple :: Rules
+simple = (explicit, [])
+
+clause :: RuleClause -> Rule
+clause (Clause clauseName f) displayCode ts
+  | displayCode == clauseName = f displayCode ts
+  | otherwise = Nothing
+
+applyStyle :: Rules -> Tree (Selectable String) -> Layout
+applyStyle def (T (Select tag) ts) =
+  box $ applyStyle def (T (NoSelect tag) ts)
+applyStyle def@(fallback, clauses) (T (NoSelect tag) ts) =
+  fromMaybe basicLayout $ foldl (<|>) empty attempts where
+    attempts :: [Maybe Layout]
+    attempts = map (`clause` tag) clauses <*> [map (applyStyle def) ts]
+    basicLayout = fallback tag . map (applyStyle def) $ ts
+
 data Layout =
   Lit (Int, Int) String |
   VCat (Int, Int) Layout Layout |
   HCat (Int, Int) Layout Layout
  deriving Show
+
+explicit :: FallbackRule
+explicit displayCode [] = explicit displayCode [lit "(())"]
+explicit displayCode (x:xs) =
+ vcat [hcat [lit displayCode, lit ":"],
+ hcat [lit "  ", vcat (x:xs)]]
+
+justTag :: FallbackRule
+justTag tag _ = lit tag
+
+binOp :: Rule
+binOp _ (op:xs@(_:_:_)) =
+ Just $ hcat (intersperse (hcat [lit " ", op, lit " "]) xs)
+binOp _ _ = Nothing
+
+functionCall :: Rule
+functionCall _ (f:args) = Just $ cat [header, body, footer] where
+ cat = if width (hcat args) <= 35 then hcat else vcat
+ header = hcat [f, lit "("]
+ body = cat (intersperse (lit ", ") args)
+ footer = lit ")"
+functionCall _ _ = Nothing
+
+rawData :: Rule
+rawData _ [dat] = Just dat
+rawData _ _ = Nothing
+
+data Selectable a = Select a | NoSelect a
+getSelectable :: Selectable a -> a
+getSelectable (Select a) = a
+getSelectable (NoSelect a) = a
 
 lit' :: String -> Layout
 lit' s = Lit (length s, 1) s
@@ -45,8 +112,10 @@ pad (w, h) ss = take h . map (take w) $ infinite where
 padV :: Int -> Layout -> [String]
 padV h x = let
   diff = h - height x
-  prePad = replicate (ceiling (realToFrac diff/2)) (replicate (width x) ' ')
-  postPad = replicate (floor (realToFrac diff/2)) (replicate (width x) ' ')
+  preHeight = ceiling (fromIntegral diff / 2 :: Double)
+  postHeight = floor (fromIntegral diff / 2 :: Double)
+  prePad = replicate preHeight (replicate (width x) ' ')
+  postPad = replicate postHeight (replicate (width x) ' ')
   in prePad ++ renderToLines x ++ postPad
 
 padH :: Int -> Layout -> [String]
@@ -59,18 +128,6 @@ renderToLines (HCat (_, h) l r) =
 renderToLines (VCat (w, _) t b) =
   padH w t ++ padH w b
 
-render :: Layout -> String
-render = unlines . renderToLines
-
-type Style = Layout -> [Layout] -> Layout
-
-delimitedList' :: Layout -> Layout -> Layout -> [Layout] -> Layout
-delimitedList' open close sep xs = hcat [open, hcat (intersperse sep xs), close]
-
-delimitedList :: String -> String -> String -> [Layout] -> Layout
-delimitedList open close sep =
-  delimitedList' (lit open) (lit close) (lit sep)
-
 box :: Layout -> Layout
 box x =
   hcat [verticalBarrier,
@@ -78,66 +135,3 @@ box x =
         verticalBarrier] where
   verticalBarrier = vcat [lit "*", vcat $ replicate (height x) (lit "|"), lit "*"]
   horizontalBarrier = hcat (replicate (width x) (lit "-"))
-
-basic :: Style
-basic text [] = text
-basic tag xs@(_:_) =
-  vcat [hcat [basic tag [], lit ":"],
-        hcat [lit "  ", vcat xs]]
-
-binOp :: Style
-binOp op xs@(_:_:_) = hcat (intersperse (hcat [lit " ", op, lit " "]) xs)
-binOp op xs = basic op xs
-
-functionCall :: Style
-functionCall f [] = f
-functionCall f xs
-  | width (hcat xs) <= 35 = hcat [
-      f, delimitedList "(" ")" ", " xs
-    ]
-  | otherwise = basic f xs
-
-selected :: Style -> Style
-selected sty tag xs = let
-  body = sty tag xs
-  in box body
-
-data Selectable a = Select a | NoSelect a
-getSelectable :: Selectable a -> a
-getSelectable (Select a) = a
-getSelectable (NoSelect a) = a
-
-type TreeLayoutRule = Tree (Selectable String) -> Layout
-
-treeLayout :: Tree (Selectable String) -> Layout
-treeLayout (T (Select tag) ts) =
-  box . treeLayout $ T (NoSelect tag) ts
-treeLayout (T (NoSelect tag) []) = lit tag
-treeLayout (T (NoSelect "BIN_OP") (t:ts)) =
-  binOp (treeLayout t) (map treeLayout ts)
-treeLayout (T (NoSelect "CALL") (t:ts)) =
-  functionCall (treeLayout t) (map treeLayout ts)
-treeLayout (T _ (t:ts)) =
-  basic (treeLayout t) (map treeLayout ts)
-
-basicTreeLayout :: Tree (Selectable String) -> Layout
-basicTreeLayout (T (Select tag) ts) = box . basicTreeLayout $ T (NoSelect tag) ts
-basicTreeLayout (T (NoSelect tag) ts) = basic (lit tag) (map basicTreeLayout ts)
-
-type RulesDefinition = (String -> [Layout] -> Layout, [RuleClause])
-
-data RuleClause = Clause String (String -> [Layout] -> Maybe Layout)
-
-clause :: RuleClause -> String -> [Layout] -> Maybe Layout
-clause (Clause clauseName f) tag ts
-  | tag == clauseName = f tag ts
-  | otherwise = Nothing
-
-definition :: RulesDefinition -> Tree (Selectable String) -> Layout
-definition def (T (Select tag) ts) =
-  box $ definition def (T (NoSelect tag) ts)
-definition def@(fallback, clauses) (T (NoSelect tag) ts) =
-  fromMaybe basicLayout $ foldl (<|>) empty attempts where
-    attempts :: [Maybe Layout]
-    attempts = map (`clause` tag) clauses <*> [map (definition def) ts]
-    basicLayout = fallback tag . map (definition def) $ ts

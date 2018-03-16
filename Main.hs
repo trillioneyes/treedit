@@ -1,15 +1,14 @@
 module Main (main) where
 import Lib
 import Data.Maybe(fromMaybe)
-import Data.Char
 import System.Environment
 import Treedit.IO
-import Treedit.Style
+import qualified Treedit.Style as Style
 
 main :: IO ()
 main = do
   path:_ <- getArgs
-  cur <- edit treeLayout =<< getCursor path
+  cur <- edit Style.pseudoPy =<< getCursor path
   writeCursor path cur
 getCursor :: String -> IO (Cursor String)
 getCursor path = fromMaybe (cursor "") `fmap` readCursor path
@@ -28,25 +27,25 @@ command line = case words line of
   ["x"] -> delete
   _ -> Just
 
-edit :: TreeLayoutRule -> Cursor String -> IO (Cursor String)
+edit :: Style.Rules -> Cursor String -> IO (Cursor String)
 edit layOut c = do
   putStr (printCursor layOut c)
   line <- getLine
   case line of
     "save" -> return c
-    "simple" -> edit basicTreeLayout c
-    "pretty" -> edit treeLayout c
+    "view simple" -> edit Style.simple c
+    "view pretty" -> edit Style.pseudoPy c
     _ -> edit layOut (fromMaybe c (command line c))
 
-printCursor :: TreeLayoutRule -> Cursor String -> String
-printCursor layOut = render . layOut . stitch . styleCursor
+printCursor :: Style.Rules -> Cursor String -> String
+printCursor layOut = Style.render layOut . stitch . styleCursor
 
-styleContext :: Context String -> Context (Selectable String)
+styleContext :: Context String -> Context (Style.Selectable String)
 styleContext (C tag ls rs) =
   C styleTag (map styleContext ls) (map styleContext rs) where
-    styleTag = NoSelect tag
+    styleTag = Style.NoSelect tag
 
-styleCursor :: Cursor String -> Cursor (Selectable String)
+styleCursor :: Cursor String -> Cursor (Style.Selectable String)
 styleCursor (cs, C tag ls rs) =
    (map styleContext cs,
-    C (Select tag) (map styleContext ls) (map styleContext rs))
+    C (Style.Select tag) (map styleContext ls) (map styleContext rs))

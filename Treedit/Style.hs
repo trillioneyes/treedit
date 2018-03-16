@@ -78,11 +78,10 @@ box x =
   horizontalBarrier = hcat (replicate (width x) (lit "-"))
 
 basic :: Style
-basic text [] = hcat [lit "'", text, lit "'"]
+basic text [] = text
 basic tag xs@(_:_) =
-  vcat [hcat [basic tag [], lit "("],
-        hcat [lit "  ", vcat xs],
-        lit ")"]
+  vcat [hcat [basic tag [], lit ":"],
+        hcat [lit "  ", vcat xs]]
 
 binOp :: Style
 binOp op xs@(_:_:_) = hcat (intersperse (hcat [lit " ", op, lit " "]) xs)
@@ -106,10 +105,11 @@ unSelectable :: Selectable a -> a
 unSelectable (Select a) = a
 unSelectable (NoSelect a) = a
 
+type TreeLayoutRule = Tree (Selectable String) -> Layout
+
 treeLayout :: Tree (Selectable String) -> Layout
 treeLayout (T (Select tag) ts) =
   box . treeLayout $ T (NoSelect tag) ts
--- treeLayout (T (NoSelect tag) ts) = basic tag (map treeLayout ts)
 treeLayout (T (NoSelect tag) []) = lit tag
 treeLayout (T (NoSelect "BIN_OP") (t:ts)) =
   binOp (treeLayout t) (map treeLayout ts)
@@ -117,3 +117,7 @@ treeLayout (T (NoSelect "CALL") (t:ts)) =
   functionCall (treeLayout t) (map treeLayout ts)
 treeLayout (T _ (t:ts)) =
   basic (treeLayout t) (map treeLayout ts)
+
+basicTreeLayout :: Tree (Selectable String) -> Layout
+basicTreeLayout (T (Select tag) ts) = box . basicTreeLayout $ T (NoSelect tag) ts
+basicTreeLayout (T (NoSelect tag) ts) = basic (lit tag) (map basicTreeLayout ts)

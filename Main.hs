@@ -9,7 +9,7 @@ import Treedit.Style
 main :: IO ()
 main = do
   path:_ <- getArgs
-  cur <- edit =<< getCursor path
+  cur <- edit treeLayout =<< getCursor path
   writeCursor path cur
 getCursor :: String -> IO (Cursor String)
 getCursor path = fromMaybe (cursor "") `fmap` readCursor path
@@ -28,20 +28,18 @@ command line = case words line of
   ["x"] -> delete
   _ -> Just
 
-edit :: Cursor String -> IO (Cursor String)
-edit c = do
-  putStr (printCursor c)
+edit :: TreeLayoutRule -> Cursor String -> IO (Cursor String)
+edit layOut c = do
+  putStr (printCursor layOut c)
   line <- getLine
   case line of
     "save" -> return c
-    _ -> edit (fromMaybe c (command line c))
+    "simple" -> edit basicTreeLayout c
+    "pretty" -> edit treeLayout c
+    _ -> edit layOut (fromMaybe c (command line c))
 
-printCursor :: Cursor String -> String
-printCursor = render . treeLayout . stitch . styleCursor
-
-stylize :: String -> Style
-stylize tag | all isAlphaNum tag = functionCall
-            | otherwise = binOp
+printCursor :: TreeLayoutRule -> Cursor String -> String
+printCursor layOut = render . layOut . stitch . styleCursor
 
 styleContext :: Context String -> Context (Selectable String)
 styleContext (C tag ls rs) =

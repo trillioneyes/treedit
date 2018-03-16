@@ -12,6 +12,9 @@ data Tree tag = T tag [Tree tag]
   deriving (Show, Generic)
 instance Serialize a => Serialize (Tree a) where
 
+instance Functor Tree where
+  fmap f (T tag ts) = T (f tag) (map (fmap f) ts)
+
 data Context tag = C tag [Context tag] [Context tag]
   deriving Show
 

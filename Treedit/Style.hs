@@ -1,5 +1,7 @@
 module Treedit.Style where
 import Data.List
+import Data.Maybe
+import Control.Applicative
 import Lib
 
 data Layout =
@@ -101,9 +103,9 @@ selected sty tag xs = let
   in box body
 
 data Selectable a = Select a | NoSelect a
-unSelectable :: Selectable a -> a
-unSelectable (Select a) = a
-unSelectable (NoSelect a) = a
+getSelectable :: Selectable a -> a
+getSelectable (Select a) = a
+getSelectable (NoSelect a) = a
 
 type TreeLayoutRule = Tree (Selectable String) -> Layout
 
@@ -121,3 +123,21 @@ treeLayout (T _ (t:ts)) =
 basicTreeLayout :: Tree (Selectable String) -> Layout
 basicTreeLayout (T (Select tag) ts) = box . basicTreeLayout $ T (NoSelect tag) ts
 basicTreeLayout (T (NoSelect tag) ts) = basic (lit tag) (map basicTreeLayout ts)
+
+type RulesDefinition = (String -> [Layout] -> Layout, [RuleClause])
+
+data RuleClause = Clause String (String -> [Layout] -> Maybe Layout)
+
+clause :: RuleClause -> String -> [Layout] -> Maybe Layout
+clause (Clause clauseName f) tag ts
+  | tag == clauseName = f tag ts
+  | otherwise = Nothing
+
+definition :: RulesDefinition -> Tree (Selectable String) -> Layout
+definition def (T (Select tag) ts) =
+  box $ definition def (T (NoSelect tag) ts)
+definition def@(fallback, clauses) (T (NoSelect tag) ts) =
+  fromMaybe basicLayout $ foldl (<|>) empty attempts where
+    attempts :: [Maybe Layout]
+    attempts = map (`clause` tag) clauses <*> [map (definition def) ts]
+    basicLayout = fallback tag . map (definition def) $ ts

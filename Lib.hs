@@ -1,8 +1,12 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric, TupleSections #-}
 module Lib where
 import Data.Serialize(Serialize)
 import GHC.Generics(Generic)
 import Control.Applicative
+import Control.Monad
+
+try :: Alternative f => (a -> f a) -> a -> f a
+try f a = f a <|> pure a
 
 data Tree tag = T tag [Tree tag]
   deriving (Show, Generic)
@@ -14,6 +18,9 @@ data Context tag = C tag [Context tag] [Context tag]
 type Cursor tag = ([Context tag], Context tag)
 cursor :: tag -> Cursor tag
 cursor t = ([], context t)
+
+modifyContext :: (Context tag -> Maybe (Context tag)) -> Cursor tag -> Maybe (Cursor tag)
+modifyContext f (cs, c) = ((cs,) . normalize) <$> f c
 
 children :: Context a -> [Context a]
 children (C _ ls rs) = reverse ls ++ rs
@@ -35,6 +42,9 @@ seekRight _ = Nothing
 descend :: Context a -> Maybe (Context a)
 descend (C _ _ (r:_)) = Just r
 descend (C _ _ []) = Nothing
+normalize :: Context a -> Context a
+normalize (C tag (l:ls) []) = C tag ls [l]
+normalize c = c
 
 up :: Cursor a -> Maybe (Cursor a)
 up ([], _) = Nothing
@@ -50,28 +60,23 @@ down (cs, t) = do
 insertDown :: a -> Cursor a -> Cursor a
 insertDown tag (cs, c) = (c:cs, context tag)
 
-modifyUp :: Cursor a -> (Context a -> Maybe (Context a)) -> Maybe (Cursor a)
-modifyUp ([], _) _ = Nothing
-modifyUp (c:cs, t) f = do
-  c' <- f (addChild c t)
-  down (cs, c') <|> Just (cs, c')
-modifyUp' :: Cursor a -> (Context a -> Context a) -> Maybe (Cursor a)
-modifyUp' c f = modifyUp c (return . f)
+modifyUp :: (Context a -> Maybe (Context a)) -> Cursor a -> Maybe (Cursor a)
+modifyUp f = up >=> modifyContext f >=> try down
+modifyUp' :: (Context a -> Context a) -> Cursor a -> Maybe (Cursor a)
+modifyUp' f = modifyUp (return . f)
 
 next :: Cursor a -> Maybe (Cursor a)
-next cur = modifyUp cur seekRight
+next = modifyUp seekRight
 insertNext :: a -> Cursor a -> Maybe (Cursor a)
-insertNext tag cur = modifyUp' cur $ \con -> case seekRight con of
-  Nothing -> addChild con (context tag)
-  Just con' -> addChild con' (context tag)
+insertNext tag = modifyUp ((`addChild` context tag) *> seekRight)
 
 previous :: Cursor a -> Maybe (Cursor a)
-previous cur = modifyUp cur seekLeft
+previous = modifyUp seekLeft
 insertPrevious :: a -> Cursor a -> Maybe (Cursor a)
-insertPrevious tag cur = modifyUp' cur (`addChild` context tag)
+insertPrevious tag = modifyUp' (`addChild` context tag)
 
 delete :: Cursor a -> Maybe (Cursor a)
-delete cur = modifyUp cur removeChild
+delete = modifyUp removeChild
 
 rename :: a -> Cursor a -> Cursor a
 rename tag (cs, C _ ls rs) = (cs, C tag ls rs)

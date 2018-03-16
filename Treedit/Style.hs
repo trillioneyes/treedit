@@ -60,7 +60,7 @@ renderToLines (VCat (w, _) t b) =
 render :: Layout -> String
 render = unlines . renderToLines
 
-type Style = String -> [Layout] -> Layout
+type Style = Layout -> [Layout] -> Layout
 
 delimitedList' :: Layout -> Layout -> Layout -> [Layout] -> Layout
 delimitedList' open close sep xs = hcat [open, hcat (intersperse sep xs), close]
@@ -78,21 +78,21 @@ box x =
   horizontalBarrier = hcat (replicate (width x) (lit "-"))
 
 basic :: Style
-basic text [] = hcat [lit "'", lit text, lit "'"]
+basic text [] = hcat [lit "'", text, lit "'"]
 basic tag xs@(_:_) =
   vcat [hcat [basic tag [], lit "("],
         hcat [lit "  ", vcat xs],
         lit ")"]
 
 binOp :: Style
-binOp op xs@(_:_:_) = hcat (intersperse (hcat [lit " ", lit op, lit " "]) xs)
+binOp op xs@(_:_:_) = hcat (intersperse (hcat [lit " ", op, lit " "]) xs)
 binOp op xs = basic op xs
 
 functionCall :: Style
-functionCall f [] = lit f
+functionCall f [] = f
 functionCall f xs
   | width (hcat xs) <= 35 = hcat [
-      lit f, delimitedList "(" ")" ", " xs
+      f, delimitedList "(" ")" ", " xs
     ]
   | otherwise = basic f xs
 
@@ -109,10 +109,11 @@ unSelectable (NoSelect a) = a
 treeLayout :: Tree (Selectable String) -> Layout
 treeLayout (T (Select tag) ts) =
   box . treeLayout $ T (NoSelect tag) ts
+-- treeLayout (T (NoSelect tag) ts) = basic tag (map treeLayout ts)
 treeLayout (T (NoSelect tag) []) = lit tag
-treeLayout (T (NoSelect "BIN_OP") (T tag _:ts)) =
-  binOp (unSelectable tag) (map treeLayout ts)
-treeLayout (T (NoSelect "CALL") (T tag _:ts)) =
-  functionCall (unSelectable tag) (map treeLayout ts)
-treeLayout (T _ (T tag _:ts)) =
-  basic (unSelectable tag) (map treeLayout ts)
+treeLayout (T (NoSelect "BIN_OP") (t:ts)) =
+  binOp (treeLayout t) (map treeLayout ts)
+treeLayout (T (NoSelect "CALL") (t:ts)) =
+  functionCall (treeLayout t) (map treeLayout ts)
+treeLayout (T _ (t:ts)) =
+  basic (treeLayout t) (map treeLayout ts)

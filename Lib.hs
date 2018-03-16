@@ -71,7 +71,9 @@ modifyUp' f = modifyUp (return . f)
 next :: Cursor a -> Maybe (Cursor a)
 next = modifyUp seekRight
 insertNext :: a -> Cursor a -> Maybe (Cursor a)
-insertNext tag = modifyUp ((`addChild` context tag) *> seekRight)
+insertNext tag = modifyUp (\c -> do
+  c' <- try seekRight c
+  return (c' `addChild` context tag))
 
 previous :: Cursor a -> Maybe (Cursor a)
 previous = modifyUp seekLeft

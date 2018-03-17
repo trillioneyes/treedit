@@ -81,7 +81,7 @@ indent x = hcat [lit "  ", x]
 array :: [Layout] -> Layout
 array elems = fit [lit "[", fit' elems, lit "]"] where
   fit = fitCat 4
-  fit' = fitCat' 35
+  fit' = fitCat' 80
 
 fitCat :: Int -> [Layout] -> Layout
 fitCat maxHeight xs | height (hcat xs) <= maxHeight = hcat xs
@@ -98,7 +98,7 @@ binOp _ _ = Nothing
 
 functionCall :: Rule
 functionCall _ (f:args) = Just $ cat [header, body, footer] where
- cat = if width (hcat args) <= 35 then hcat else vcat
+ cat = if width (hcat args) <= 80 then hcat else vcat
  header = hcat [f, lit "("]
  body = cat (intersperse (lit ", ") args)
  footer = lit ")"

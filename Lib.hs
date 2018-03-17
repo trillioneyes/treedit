@@ -4,9 +4,12 @@ import Data.Serialize(Serialize)
 import GHC.Generics(Generic)
 import Control.Applicative
 import Control.Monad
+import Data.Maybe
 
-try :: Alternative f => (a -> f a) -> a -> f a
-try f a = f a <|> pure a
+try' :: Alternative f => (a -> f a) -> a -> f a
+try' f a = f a <|> pure a
+try :: (a -> Maybe a) -> a -> a
+try f a = fromMaybe a (f a)
 
 data Tree tag = T tag [Tree tag]
   deriving (Show, Generic)
@@ -22,8 +25,11 @@ type Cursor tag = ([Context tag], Context tag)
 cursor :: tag -> Cursor tag
 cursor t = ([], context t)
 
+mapContext :: (Context tag -> Context tag) -> Cursor tag -> Cursor tag
+mapContext f (cs, c) = (cs, f c)
+
 modifyContext :: (Context tag -> Maybe (Context tag)) -> Cursor tag -> Maybe (Cursor tag)
-modifyContext f (cs, c) = ((cs,) . normalize) <$> f c
+modifyContext f (cs, c) = (cs,) <$> f c
 
 children :: Context a -> [Context a]
 children (C _ ls rs) = reverse ls ++ rs
@@ -33,6 +39,7 @@ addChild :: Context a -> Context a -> Context a
 addChild (C tag ls rs) new = C tag ls (new:rs)
 removeChild :: Context a -> Maybe (Context a)
 removeChild (C tag ls (_:rs)) = Just $ C tag ls rs
+removeChild (C tag (_:ls) []) = Just $ C tag ls []
 removeChild _ = Nothing
 context :: a -> Context a
 context a = C a [] []
@@ -44,19 +51,22 @@ seekRight (C tag ls (r:rs)) = Just $ C tag (r:ls) rs
 seekRight _ = Nothing
 descend :: Context a -> Maybe (Context a)
 descend (C _ _ (r:_)) = Just r
-descend (C _ _ []) = Nothing
-normalize :: Context a -> Context a
-normalize (C tag (l:ls) []) = C tag ls [l]
-normalize c = c
+descend (C _ (l:_) []) = Just l
+descend _ = Nothing
+swap :: Context a -> Maybe (Context a)
+swap (C tag (l:ls) (r:rs)) = Just $ C tag (r:ls) (l:rs)
+swap _ = Nothing
 
 up :: Cursor a -> Maybe (Cursor a)
 up ([], _) = Nothing
 up (c:cs, v) = Just (cs, addChild c v)
 insertUp :: a -> Cursor a -> Cursor a
-insertUp tag (cs, t) = (cs, addChild (context tag) t)
+insertUp tag = mapContext (context tag `addChild`)
+swapUp :: Cursor a -> Maybe (Cursor a)
+swapUp (c:cs, t) = Just (t:cs, c)
+swapUp _ = Nothing
 moveUp :: Cursor a -> Maybe (Cursor a)
-moveUp (c:cs, t) = Just (t:cs, c)
-moveUp _ = Nothing
+moveUp = swapUp >=> up
 
 down :: Cursor a -> Maybe (Cursor a)
 down (cs, t) = do
@@ -64,24 +74,34 @@ down (cs, t) = do
   c <- removeChild t
   return (c:cs, t')
 insertDown :: a -> Cursor a -> Cursor a
-insertDown tag (cs, c) = (c:cs, context tag)
+insertDown tag = fromJust . down . mapContext (`addChild` context tag)
+swapDown :: Cursor a -> Maybe (Cursor a)
+swapDown = down >=> moveUp
+moveDown :: Cursor a -> Maybe (Cursor a)
+moveDown = down >=> swapUp
 
 modifyUp :: (Context a -> Maybe (Context a)) -> Cursor a -> Maybe (Cursor a)
-modifyUp f = up >=> modifyContext f >=> try down
+modifyUp f = up >=> modifyContext f >=> try' down
 modifyUp' :: (Context a -> Context a) -> Cursor a -> Maybe (Cursor a)
 modifyUp' f = modifyUp (return . f)
 
 next :: Cursor a -> Maybe (Cursor a)
-next = modifyUp seekRight
+next = up >=> modifyContext seekRight >=> down
 insertNext :: a -> Cursor a -> Maybe (Cursor a)
-insertNext tag = modifyUp (\c -> do
-  c' <- try seekRight c
-  return (c' `addChild` context tag))
+insertNext tag = up >=> modifyContext seekRight >=> (Just . insertDown tag)
+swapNext :: Cursor a -> Maybe (Cursor a)
+swapNext = moveNext >=> previous
+moveNext :: Cursor a -> Maybe (Cursor a)
+moveNext = next >=> swapPrevious
 
 previous :: Cursor a -> Maybe (Cursor a)
 previous = modifyUp seekLeft
 insertPrevious :: a -> Cursor a -> Maybe (Cursor a)
-insertPrevious tag = modifyUp' (`addChild` context tag)
+insertPrevious tag = up >=> (return . insertDown tag)
+swapPrevious :: Cursor a -> Maybe (Cursor a)
+swapPrevious = up >=> modifyContext swap >=> down
+movePrevious :: Cursor a -> Maybe (Cursor a)
+movePrevious = swapPrevious >=> previous
 
 delete :: Cursor a -> Maybe (Cursor a)
 delete = modifyUp removeChild

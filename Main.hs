@@ -20,15 +20,23 @@ saveCursor [] = const (return ())
 
 command :: String -> Cursor String -> Maybe (Cursor String)
 command line = case words line of
-  ["k"] -> up
-  ["j"] -> down
-  ["l"] -> next
   ["h"] -> previous
-  "r" : name -> Just . rename (unwords name)
-  "L" : name -> insertNext (unwords name)
   "H" : name -> insertPrevious (unwords name)
-  "K" : name -> Just . insertUp (unwords name)
+  ["sh"] -> swapPrevious
+  ["mh"] -> movePrevious
+  ["j"] -> down
+  ["sj"] -> swapDown
+  ["mj"] -> moveDown
   "J" : name -> Just . insertDown (unwords name)
+  ["k"] -> up
+  ["sk"] -> swapUp
+  ["mk"] -> moveUp
+  "K" : name -> Just . insertUp (unwords name)
+  ["l"] -> next
+  ["sl"] -> swapNext
+  ["ml"] -> moveNext
+  "L" : name -> insertNext (unwords name)
+  "r" : name -> Just . rename (unwords name)
   ["x"] -> delete
   _ -> Just
 

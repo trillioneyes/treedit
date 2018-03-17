@@ -8,14 +8,7 @@ type Rules = (FallbackRule, [RuleClause])
 data RuleClause = Clause String Rule
 type Rule = String -> [Layout] -> Maybe Layout
 type FallbackRule = String -> [Layout] -> Layout
-
--- | Create a clause that doesn't render its display code.
-invisible :: String -> ([Layout] -> Maybe Layout) -> RuleClause
-invisible displayCode f = Clause displayCode (\_ subs -> f subs)
-
-single :: (Layout -> Layout) -> [Layout] -> Maybe Layout
-single f [x] = Just $ f x
-single _ _ = Nothing
+data Selectable a = Select a | NoSelect a
 
 render :: Rules -> Tree (Selectable String) -> String
 render rules = unlines . renderToLines . applyStyle rules
@@ -39,6 +32,23 @@ pseudoPy = (justTag, [
 simple :: Rules
 simple = (explicit, [])
 
+--readStyle :: Tree String -> Maybe Rules
+
+-- ***************** Private functions ****************
+
+type StyleDefinition = (FallbackExp, [ClauseExp])
+-- | A fallback expression is like a rule expression but has no pattern; instead
+-- it can only reference the variables "displayCode" and "...".
+type FallbackExp = LayoutExp
+type ClauseExp = (String, Pattern, LayoutExp)
+data LayoutExp = Vertical [LayoutExp]
+  | Horizontal [LayoutExp]
+  | Fit [LayoutExp]
+  | Var String
+  | VarRest ([Layout] -> Layout)
+
+data Pattern = P { vars :: [String], restAllowed :: Bool}
+
 clause :: RuleClause -> Rule
 clause (Clause clauseName f) displayCode ts
   | displayCode == clauseName = f displayCode ts
@@ -58,6 +68,14 @@ data Layout =
   VCat (Int, Int) Layout Layout |
   HCat (Int, Int) Layout Layout
  deriving Show
+
+-- | Create a clause that doesn't render its display code.
+invisible :: String -> ([Layout] -> Maybe Layout) -> RuleClause
+invisible displayCode f = Clause displayCode (\_ subs -> f subs)
+
+single :: (Layout -> Layout) -> [Layout] -> Maybe Layout
+single f [x] = Just $ f x
+single _ _ = Nothing
 
 explicit :: FallbackRule
 explicit displayCode [] = lit displayCode
@@ -145,7 +163,6 @@ rawData :: Rule
 rawData _ [dat] = Just dat
 rawData _ _ = Nothing
 
-data Selectable a = Select a | NoSelect a
 getSelectable :: Selectable a -> a
 getSelectable (Select a) = a
 getSelectable (NoSelect a) = a

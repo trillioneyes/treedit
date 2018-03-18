@@ -3,6 +3,7 @@ import Data.List
 import Data.Maybe
 import Control.Applicative
 import Lib
+import Text.Read(readMaybe)
 
 type Rules = (FallbackRule, [RuleClause])
 data RuleClause = Clause String Rule
@@ -32,7 +33,79 @@ pseudoPy = (justTag, [
 simple :: Rules
 simple = (explicit, [])
 
---readStyle :: Tree String -> Maybe Rules
+readStyle :: Tree String -> Maybe Rules
+readStyle (T "Style Rules" (fallback:clauses))
+  = (,) <$> readFallback fallback <*> mapM readClause clauses
+readStyle _ = Nothing
+
+readFallback :: Tree String -> Maybe FallbackRule
+readFallback (T "Fallback" [x]) = evalFallback =<< readLayoutExp x
+readFallback _ = Nothing
+
+readLayoutExp :: Tree String -> Maybe LayoutExp
+readLayoutExp (T "V" ts) = Cat Vertical <$> mapM readLayoutExp ts
+readLayoutExp (T "H" ts) = Cat Horizontal <$> mapM readLayoutExp ts
+readLayoutExp (T "Fit" ts) = Cat Fit <$> mapM readLayoutExp ts
+readLayoutExp (T "Var" [T name []]) = Var <$> readMaybe name
+readLayoutExp (T "..." []) = Just VarRest
+readLayoutExp (T "Disp" []) = Just VarDisplayCode
+readLayoutExp (T "Lit" [T val []]) = Just $ LitExp val
+readLayoutExp _ = Nothing
+
+readClause :: Tree String -> Maybe RuleClause
+readClause (T "Clause" [T name [], T "Cases" cases]) =
+  Clause name <$> (evalClause =<< mapM readCase cases)
+readClause _ = Nothing
+
+readCase :: Tree String -> Maybe (Pattern, LayoutExp)
+readCase (T "Case" [pat, x]) = (,) <$> readArgs pat <*> readLayoutExp x
+readCase _ = Nothing
+
+readArgs :: Tree String -> Maybe Pattern
+readArgs (T "Args..." args) = Just . AtLeast . length $ args
+readArgs (T "Args" args) = Just . Exactly . length $ args
+readArgs _ = Nothing
+
+validateBody :: Pattern -> LayoutExp -> Bool
+validateBody (Exactly _) VarRest = False
+validateBody (AtLeast count) (Var name) = name < count && name >= 0
+validateBody (Exactly count) (Var name) = name < count && name >= 0
+validateBody pat (Cat _ xs) = all (validateBody pat) xs
+validateBody _ _ = True
+
+-- Only use if you've called both validateBody and match
+unsafeEval :: Pattern -> LayoutExp -> String -> [Layout] -> Layout
+unsafeEval _ (LitExp s) _ _ = lit s
+unsafeEval _ VarDisplayCode code _ = lit code
+unsafeEval (AtLeast x) VarRest _ layouts = vcat (drop x layouts)
+unsafeEval _ (Var ix) _ layouts = layouts !! ix
+unsafeEval pat (Cat dir exps) code layouts =
+  cat dir (map (unsafeEval pat) exps <*> pure code <*> pure layouts)
+  where cat Horizontal = hcat
+        cat Vertical = vcat
+        cat Fit = fitCat 80
+unsafeEval _ _ _ _ = error "Programmer error: called unsafeEval without checking"
+
+eval :: Pattern -> LayoutExp -> String -> [Layout] -> Maybe Layout
+eval (Exactly len) e code layouts
+  | length layouts == len = Just (unsafeEval (Exactly len) e code layouts)
+eval (AtLeast len) e code layouts
+  | length layouts >= len = Just (unsafeEval (AtLeast len) e code layouts)
+eval _ _ _ _ = Nothing
+
+evalFallback :: LayoutExp -> Maybe (String -> [Layout] -> Layout)
+evalFallback lExp
+  | validateBody (AtLeast 0) lExp = Just $ unsafeEval (AtLeast 0) lExp
+  | otherwise = Nothing
+
+evalClause :: [(Pattern, LayoutExp)] -> Maybe (String -> [Layout] -> Maybe Layout)
+evalClause pls
+  | all (uncurry validateBody) pls =
+    Just (foldl (\f g c ls -> f c ls <|> g c ls)
+                (\_ _ -> Nothing)
+                (map (uncurry eval) pls))
+  | otherwise = Nothing
+
 
 -- ***************** Private functions ****************
 
@@ -40,14 +113,16 @@ type StyleDefinition = (FallbackExp, [ClauseExp])
 -- | A fallback expression is like a rule expression but has no pattern; instead
 -- it can only reference the variables "displayCode" and "...".
 type FallbackExp = LayoutExp
-type ClauseExp = (String, Pattern, LayoutExp)
-data LayoutExp = Vertical [LayoutExp]
-  | Horizontal [LayoutExp]
-  | Fit [LayoutExp]
-  | Var String
-  | VarRest ([Layout] -> Layout)
+type ClauseExp = (String, [(Pattern, LayoutExp)])
+data LayoutExp
+  = Cat CatDirection [LayoutExp]
+  | Var Int
+  | VarRest --([Layout] -> Layout)
+  | VarDisplayCode
+  | LitExp String
+data CatDirection = Horizontal | Vertical | Fit
 
-data Pattern = P { vars :: [String], restAllowed :: Bool}
+data Pattern = Exactly Int | AtLeast Int
 
 clause :: RuleClause -> Rule
 clause (Clause clauseName f) displayCode ts
@@ -157,7 +232,7 @@ quotes :: Layout -> Layout
 quotes x = hcat [lit "\"", x, lit "\""]
 
 var :: Layout -> Layout
-var x = x
+var x = hcat [lit "${", x, lit "}"]
 
 rawData :: Rule
 rawData _ [dat] = Just dat

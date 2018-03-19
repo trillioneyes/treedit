@@ -1,5 +1,6 @@
 module Treedit.IO
     (
+      readTree,
       readCursor,
       writeCursor
     ) where
@@ -9,16 +10,19 @@ import Data.ByteString
 import System.Directory
 import Lib
 
-readCursor :: Serialize a => FilePath -> IO (Maybe (Cursor a))
-readCursor path = do
+readTree :: Serialize a => FilePath -> IO (Maybe (Tree a))
+readTree path = do
   exists <- doesFileExist path
   if exists
     then do
       s <- readFile path
       case decode s of
         Left err -> Prelude.putStrLn err >> return Nothing
-        Right tree -> return . Just $ unstitch tree
+        Right tree -> return . Just $ tree
     else return Nothing
+
+readCursor :: Serialize a => FilePath -> IO (Maybe (Cursor a))
+readCursor path = fmap unstitch <$> readTree path
 
 writeCursor :: Serialize a => FilePath -> Cursor a -> IO ()
 writeCursor path cur = writeFile path $ encode (stitch cur)

@@ -33,6 +33,16 @@ pseudoPy = (justTag, [
 simple :: Rules
 simple = (explicit, [])
 
+simple2 :: Tree String
+simple2 = T "Style Rules" [
+    T "Fallback" [
+      T "V" [
+        T "H" [T "Disp" [], T "Lit" [T ":" []]],
+        T "H" [T "Lit" [T "--> " []], T "..." []]
+      ]
+    ]
+  ]
+
 readStyle :: Tree String -> Maybe Rules
 readStyle (T "Style Rules" (fallback:clauses))
   = (,) <$> readFallback fallback <*> mapM readClause clauses

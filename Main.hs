@@ -48,6 +48,9 @@ edit layOut c = do
     "exit" -> return c
     "view simple" -> edit Style.simple c
     "view py" -> edit Style.pseudoPy c
+    "view empty" -> do
+      styleDef <- readTree "ugly.style"
+      edit (fromMaybe layOut (Style.readStyle =<< styleDef)) c
     _ -> edit layOut (fromMaybe c (command line c))
 
 printCursor :: Style.Rules -> Cursor String -> String

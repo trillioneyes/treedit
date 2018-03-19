@@ -3,7 +3,7 @@ import Data.List
 import Data.Maybe
 import Control.Applicative
 import Lib
-import Text.Read(readMaybe)
+import qualified TreeParser as P
 
 type Rules = (FallbackRule, [RuleClause])
 data RuleClause = Clause String Rule
@@ -43,38 +43,34 @@ simple2 = T "Style Rules" [
     ]
   ]
 
-readStyle :: Tree String -> Maybe Rules
-readStyle (T "Style Rules" (fallback:clauses))
-  = (,) <$> readFallback fallback <*> mapM readClause clauses
-readStyle _ = Nothing
+parseStyle :: Tree String -> Maybe Rules
+parseStyle t = case P.parse (P.expect "Style Rules" ((,) <$> parseFallback <*> many parseClause)) t of
+  Right x -> Just x
+  Left _ -> Nothing
 
-readFallback :: Tree String -> Maybe FallbackRule
-readFallback (T "Fallback" [x]) = evalFallback =<< readLayoutExp x
-readFallback _ = Nothing
+parseFallback :: P.Parser String FallbackRule
+parseFallback = P.expect "Fallback" (P.requireMaybe =<< evalFallback <$> parseLayout)
 
-readLayoutExp :: Tree String -> Maybe LayoutExp
-readLayoutExp (T "V" ts) = Cat Vertical <$> mapM readLayoutExp ts
-readLayoutExp (T "H" ts) = Cat Horizontal <$> mapM readLayoutExp ts
-readLayoutExp (T "Fit" ts) = Cat Fit <$> mapM readLayoutExp ts
-readLayoutExp (T "Var" [T name []]) = Var <$> readMaybe name
-readLayoutExp (T "..." []) = Just VarRest
-readLayoutExp (T "Disp" []) = Just VarDisplayCode
-readLayoutExp (T "Lit" [T val []]) = Just $ LitExp val
-readLayoutExp _ = Nothing
+parseLayout :: P.Parser String LayoutExp
+parseLayout = P.expect "V" (Cat Vertical <$> many parseLayout)
+          <|> P.expect "H" (Cat Horizontal <$> many parseLayout)
+          <|> P.expect "Fit" (Cat Fit <$> many parseLayout)
+          <|> P.expect "Var" (Var <$> (P.parseInt =<< P.leaf))
+          <|> P.expect "..." (P.endOfInput >> return VarRest)
+          <|> P.expect "Disp" (P.endOfInput >> return VarDisplayCode)
+          <|> P.expect "Lit" (LitExp <$> P.leaf)
 
-readClause :: Tree String -> Maybe RuleClause
-readClause (T "Clause" [T name [], T "Cases" cases]) =
-  Clause name <$> (evalClause =<< mapM readCase cases)
-readClause _ = Nothing
+parseClause :: P.Parser String RuleClause
+parseClause = P.expect "Clause" (Clause <$> P.leaf <*> P.expect "Cases" parseCases)
 
-readCase :: Tree String -> Maybe (Pattern, LayoutExp)
-readCase (T "Case" [pat, x]) = (,) <$> readArgs pat <*> readLayoutExp x
-readCase _ = Nothing
+parseCases :: P.Parser String Rule
+parseCases = do
+  patExps <- many (P.expect "Case" ((,) <$> parsePattern <*> parseLayout))
+  (P.requireMaybe . evalClause) patExps
 
-readArgs :: Tree String -> Maybe Pattern
-readArgs (T "Args..." args) = Just . AtLeast . length $ args
-readArgs (T "Args" args) = Just . Exactly . length $ args
-readArgs _ = Nothing
+parsePattern :: P.Parser String Pattern
+parsePattern = P.expect "Args" (Exactly . length <$> P.children)
+           <|> P.expect "Args..." (AtLeast . length <$> P.children)
 
 validateBody :: Pattern -> LayoutExp -> Bool
 validateBody (Exactly _) VarRest = False

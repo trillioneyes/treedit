@@ -50,7 +50,7 @@ edit layOut c = do
     "view py" -> edit Style.pseudoPy c
     "view empty" -> do
       styleDef <- readTree "ugly.style"
-      edit (fromMaybe layOut (Style.readStyle =<< styleDef)) c
+      edit (fromMaybe layOut (Style.parseStyle =<< styleDef)) c
     _ -> edit layOut (fromMaybe c (command line c))
 
 printCursor :: Style.Rules -> Cursor String -> String

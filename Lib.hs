@@ -21,6 +21,9 @@ instance Functor Tree where
 data Context tag = C tag [Context tag] [Context tag]
   deriving Show
 
+instance Functor Context where
+  fmap f (C tag ls rs) = C (f tag) (map (fmap f) ls) (map (fmap f) rs)
+
 type Cursor tag = ([Context tag], Context tag)
 cursor :: tag -> Cursor tag
 cursor t = ([], context t)

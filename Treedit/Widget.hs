@@ -58,7 +58,7 @@ drawCursor :: Cursor AnnString -> Widget
 drawCursor = drawTree . stitch . processCursor
 
 handleTagEdit :: Event -> Cursor AnnString -> Maybe (Cursor AnnString)
-handleTagEvent (EvKey KEsc _) (cs, C (Editing ed) ls rs) =
+handleTagEdit (EvKey KEsc _) (cs, C (Editing ed) ls rs) =
     Just (cs, C (save ed) ls rs)
 handleTagEdit ev (cs, C (Editing ed) ls rs) =
     Just (cs, C (Editing $ handleEvent ev ed) ls rs)

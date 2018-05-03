@@ -1,6 +1,7 @@
 module Treedit.Widget(
-    Widget(..), Name(..), AnnString, annotate,
-    newEditor, edit, drawCursor, handleTagEdit
+    Widget(..), Name(..), AnnString, annotate, 
+    newEditor, edit, drawCursor, handleTagEdit,
+    treeViewport
 ) where
 import Brick hiding (Widget, Context)
 import qualified Brick
@@ -11,48 +12,50 @@ import TreeParser
 import Lib(Tree(..), Cursor, Context(..), stitch, mapContext)
 import Treedit.Widget.Edit
 
-data Name = CursorBox deriving (Show, Eq, Ord)
+data Name = CursorBox | TreeView deriving (Show, Eq, Ord)
 data Selected = Yes | No deriving Show
-data AnnString = Static Selected String | Editing Editor deriving Show
+data AnnString = Static String | Editing Editor deriving Show
 type Widget = Brick.Widget Name
 type Editor = BWE.Editor String Name
-
-selected :: AnnString -> Selected
-selected (Static Yes _) = Yes
-selected (Editing _) = Yes
-selected _ = No
 
 annotate :: Cursor String -> Cursor AnnString
 annotate (cs, c) = (map no cs, no c) where
     no :: Context String -> Context AnnString
-    no = fmap $ Static No
+    no = fmap Static
 
 newEditor :: AnnString
 newEditor = Editing $ BWE.editor CursorBox Nothing ""
 
 save :: Editor -> AnnString
-save = Static Yes . unlines . BWE.getEditContents
+save = Static . unlines . BWE.getEditContents
 
 edit :: Cursor AnnString -> Cursor AnnString
 edit = mapContext edit' where
     edit' :: Context AnnString -> Context AnnString
-    edit' (C (Static _ tag) ls rs) = C (Editing (BWE.editor CursorBox Nothing tag)) ls rs
+    edit' (C (Static tag) ls rs) = C (Editing (BWE.editor CursorBox Nothing tag)) ls rs
     edit' cur = cur
 
-drawTree :: Tree AnnString -> Widget
-drawTree (T (Static Yes tag) ts) =
-    visible . border . drawTree $ T (Static No tag) ts
-drawTree (T (Static No tag) ts) = str tag <=> children where
-    children = hBox $ map (padLeftRight 2 . drawTree) ts
-drawTree (T (Editing e) ts) = visible (border tag) <=> children where
-    tag = BWE.renderEditor (vBox . map str) True e
-    children = hBox . map (padLeft (Pad 2) . drawTree) $ ts
+boxChildren :: [Widget] -> Widget
+boxChildren = vBox . map (padLeft (Pad 4))
+
+processCursor :: Cursor AnnString -> Cursor ([Widget] -> Widget)
+processCursor (cs, C tag ls rs) = (map draw cs, C (drawHighlight tag) (map draw ls) (map draw rs))
+    where draw' :: AnnString -> [Widget] -> Widget
+          draw' (Static tag) ws = str tag <=> boxChildren ws
+          draw' (Editing e) ws = drawEditor e <=> boxChildren ws
+          draw = fmap draw'
+          drawHighlight t@(Static tag) ws = visible . border $ draw' t ws
+          drawHighlight (Editing e) ws = (visible . border $ drawEditor e) <=> boxChildren ws
+          drawEditor :: Editor -> Widget
+          drawEditor e | all ((==0) . textWidth) (BWE.getEditContents e) = withAttr BWE.editFocusedAttr (str " ")
+                       | otherwise = let c = BWE.getEditContents e
+                                        in hLimit (maximum (map textWidth c)) . vLimit (length c) $ BWE.renderEditor (vBox . map str) True e
+
+drawTree :: Tree ([Widget] -> Widget) -> Widget
+drawTree (T f ts) = f (map drawTree ts)
 
 drawCursor :: Cursor AnnString -> Widget
-drawCursor (cs, c) = drawTree . stitch $ (cs, select c)
-    where select :: Context AnnString -> Context AnnString
-          select (C (Static _ tag) ls rs) = C (Static Yes tag) ls rs
-          select (C (Editing e) ls rs) = C (Editing e) ls rs
+drawCursor = drawTree . stitch . processCursor
 
 handleTagEdit :: Event -> Cursor AnnString -> Maybe (Cursor AnnString)
 handleTagEvent (EvKey KEsc _) (cs, C (Editing ed) ls rs) =
@@ -60,3 +63,6 @@ handleTagEvent (EvKey KEsc _) (cs, C (Editing ed) ls rs) =
 handleTagEdit ev (cs, C (Editing ed) ls rs) =
     Just (cs, C (Editing $ handleEvent ev ed) ls rs)
 handleTagEdit _ _ = Nothing
+
+treeViewport :: Widget -> Widget
+treeViewport = viewport TreeView Both

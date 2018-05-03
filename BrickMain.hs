@@ -17,7 +17,7 @@ data TreeditState = Treedit {
 
 drawTreedit :: TreeditState -> [Widget]
 drawTreedit st =
-    [center $ drawCursor . treeditCursor $ st]
+    [center . treeViewport . drawCursor . treeditCursor $ st]
 
 charHandler :: Cursor AnnString -> Char -> Cursor AnnString
 charHandler cur key = navigate key cur

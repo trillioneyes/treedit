@@ -23,6 +23,11 @@ annotate (cs, c) = (map no cs, no c) where
     no :: Context String -> Context AnnString
     no = fmap Static
 
+annStr :: AnnString -> Widget
+annStr (Static tag) = str tag
+annStr (Editing e) = let c = BWE.getEditContents e
+    in hLimit (maximum (map textWidth c)) . vLimit (length c) $ BWE.renderEditor (vBox . map str) True e
+
 newEditor :: AnnString
 newEditor = Editing $ BWE.editor CursorBox Nothing ""
 
@@ -40,16 +45,10 @@ boxChildren = vBox . map (padLeft (Pad 4))
 
 processCursor :: Cursor AnnString -> Cursor ([Widget] -> Widget)
 processCursor (cs, C tag ls rs) = (map draw cs, C (drawHighlight tag) (map draw ls) (map draw rs))
-    where draw' :: AnnString -> [Widget] -> Widget
-          draw' (Static tag) ws = str tag <=> boxChildren ws
-          draw' (Editing e) ws = drawEditor e <=> boxChildren ws
-          draw = fmap draw'
-          drawHighlight t@(Static tag) ws = visible . border $ draw' t ws
-          drawHighlight (Editing e) ws = (visible . border $ drawEditor e) <=> boxChildren ws
-          drawEditor :: Editor -> Widget
-          drawEditor e | all ((==0) . textWidth) (BWE.getEditContents e) = withAttr BWE.editFocusedAttr (str " ")
-                       | otherwise = let c = BWE.getEditContents e
-                                        in hLimit (maximum (map textWidth c)) . vLimit (length c) $ BWE.renderEditor (vBox . map str) True e
+    where draw :: Context AnnString -> Context ([Widget] -> Widget)
+          draw = fmap (\t ws -> annStr t <=> boxChildren ws)
+          drawHighlight t@(Static tag) ws = visible . border $ annStr t <=> boxChildren ws
+          drawHighlight t@(Editing e) ws = (visible . border $ annStr t) <=> boxChildren ws
 
 drawTree :: Tree ([Widget] -> Widget) -> Widget
 drawTree (T f ts) = f (map drawTree ts)

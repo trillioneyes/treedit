@@ -9,6 +9,7 @@ import Brick.Widgets.Edit(editFocusedAttr)
 import Brick.Main
 import Graphics.Vty hiding(Cursor)
 import Data.List
+import Data.Maybe
 
 data TreeditState = Treedit {
     treeditPath :: Maybe FilePath,
@@ -30,6 +31,7 @@ charHandler cur key = navigate key cur
           navigate 'L' = try (insertNext newEditor)
           navigate 'H' = try (insertPrevious newEditor)
           navigate 'i' = edit
+          navigate 'x' = try Lib.delete
           navigate _ = id
 
 handleNavigate :: Event -> Cursor AnnString -> EventM Name (Next (Cursor AnnString))
@@ -52,8 +54,10 @@ app = App {
     appAttrMap = const (attrMap defAttr [(editFocusedAttr, white `on` blue)])
     }
 
-main :: IO ()
-main = do
-    (path:_) <- getArgs
-    Just t <- readTree path
-    defaultMain app (Treedit Nothing (annotate . unstitch $ t)) >> return ()
+processArgs :: [String] -> IO TreeditState
+processArgs (path:_) = let emptyTree = T "" []
+    in Treedit (Just path) . annotate . unstitch . fromMaybe emptyTree <$> readTree path
+processArgs [] = return . Treedit Nothing . annotate . unstitch $ T "" []
+
+main :: IO TreeditState
+main = getArgs >>= processArgs >>= defaultMain app

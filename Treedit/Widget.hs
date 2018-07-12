@@ -25,8 +25,11 @@ annotate (cs, c) = (map no cs, no c) where
 
 annStr :: AnnString -> Widget
 annStr (Static tag) = str tag
-annStr (Editing e) = let c = BWE.getEditContents e
-    in hLimit (maximum (map textWidth c)) . vLimit (length c) $ BWE.renderEditor (vBox . map str) True e
+annStr (Editing e) = let
+       c = BWE.getEditContents e
+       width = maximum (map textWidth c) + 1
+       height = maximum [1, length c]
+    in hLimit width . vLimit height $ BWE.renderEditor (vBox . map str) True e
 
 newEditor :: AnnString
 newEditor = Editing $ BWE.editor CursorBox Nothing ""

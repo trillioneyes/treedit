@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Treedit.Widget(
     Widget(..), Name(..), AnnString, annotate, 
     newEditor, edit, drawCursor, handleTagEdit,
@@ -46,17 +47,24 @@ edit = mapContext edit' where
 boxChildren :: [Widget] -> Widget
 boxChildren = vBox . map (padLeft (Pad 4))
 
-processCursor :: Cursor AnnString -> Cursor ([Widget] -> Widget)
-processCursor (cs, C tag ls rs) = (map (fmap draw) cs, C (visible . border . draw tag) (map (fmap draw) ls) (map (fmap draw) rs))
-    where draw :: AnnString -> [Widget] -> Widget
-          draw (Static t) ws = str t <=> boxChildren ws
-          draw t ws = annStr t <=> boxChildren ws
+type RenderCtx = [AttrName]
+nextCtx :: RenderCtx -> RenderCtx
+nextCtx (_:xs) = xs
+nextCtx [] = []
+initCtx :: RenderCtx
+initCtx = cycle ["red", "orange", "yellow", "green", "blue", "purple"]
 
-drawTree :: Tree ([Widget] -> Widget) -> Widget
-drawTree (T f ts) = f (map drawTree ts)
+processCursor :: Cursor AnnString -> Cursor ((RenderCtx, [Widget]) -> Widget)
+processCursor (cs, C tag ls rs) = (map (fmap draw) cs, C (visible . border . draw tag) (map (fmap draw) ls) (map (fmap draw) rs))
+    where draw :: AnnString -> (RenderCtx, [Widget]) -> Widget
+          draw t (color:_, ws) = withAttr color $ annStr t <=> boxChildren ws
+          draw t (_, ws) = annStr t <=> boxChildren ws
+
+drawTree :: RenderCtx -> Tree ((RenderCtx, [Widget]) -> Widget) -> Widget
+drawTree d (T f ts) = f (d, map (drawTree (nextCtx d)) ts)
 
 drawCursor :: Cursor AnnString -> Widget
-drawCursor = drawTree . stitch . processCursor
+drawCursor = drawTree initCtx . stitch . processCursor
 
 handleTagEdit :: Event -> Cursor AnnString -> Maybe (Cursor AnnString)
 handleTagEdit (EvKey KEsc _) (cs, C (Editing ed) ls rs) =

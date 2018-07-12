@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module BrickMain (main) where
 import Lib
 import System.Environment
@@ -51,7 +52,13 @@ app = App {
     appChooseCursor = showFirstCursor,
     appHandleEvent = (\ s (VtyEvent e) -> handleEvent s e),
     appStartEvent = return,
-    appAttrMap = const (attrMap defAttr [(editFocusedAttr, white `on` blue)])
+    appAttrMap = const (attrMap defAttr [(editFocusedAttr, black `on` white),
+                                         ("red", brightRed `on` black),
+                                         ("orange", brightYellow `on` black),
+                                         ("yellow", brightBlue `on` black),
+                                         ("green", brightCyan `on` black),
+                                         ("blue", brightGreen `on` black),
+                                         ("purple", brightMagenta `on` black)])
     }
 
 processArgs :: [String] -> IO TreeditState

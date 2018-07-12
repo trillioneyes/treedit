@@ -48,7 +48,7 @@ handleEvent Treedit{ treeditPath = p, treeditCursor = cur } ev =
 app :: App TreeditState () Name
 app = App {
     appDraw = drawTreedit,
-    appChooseCursor = \_ -> showCursorNamed CursorBox,
+    appChooseCursor = showFirstCursor,
     appHandleEvent = (\ s (VtyEvent e) -> handleEvent s e),
     appStartEvent = return,
     appAttrMap = const (attrMap defAttr [(editFocusedAttr, white `on` blue)])

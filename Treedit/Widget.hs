@@ -47,24 +47,24 @@ edit = mapContext edit' where
 boxChildren :: [Widget] -> Widget
 boxChildren = vBox . map (padLeft (Pad 4))
 
-type RenderCtx = [AttrName]
-nextCtx :: RenderCtx -> RenderCtx
-nextCtx (_:xs) = xs
-nextCtx [] = []
-initCtx :: RenderCtx
-initCtx = cycle ["red", "orange", "yellow", "green", "blue", "purple"]
+type RenderState = [AttrName]
+nextState :: RenderState -> RenderState
+nextState (_:xs) = xs
+nextState [] = []
+initState :: RenderState
+initState = cycle ["red", "orange", "yellow", "green", "blue", "purple"]
 
-processCursor :: Cursor AnnString -> Cursor ((RenderCtx, [Widget]) -> Widget)
+processCursor :: Cursor AnnString -> Cursor ((RenderState, [Widget]) -> Widget)
 processCursor (cs, C tag ls rs) = (map (fmap draw) cs, C (visible . border . draw tag) (map (fmap draw) ls) (map (fmap draw) rs))
-    where draw :: AnnString -> (RenderCtx, [Widget]) -> Widget
+    where draw :: AnnString -> (RenderState, [Widget]) -> Widget
           draw t (color:_, ws) = withAttr color $ annStr t <=> boxChildren ws
           draw t (_, ws) = annStr t <=> boxChildren ws
 
-drawTree :: RenderCtx -> Tree ((RenderCtx, [Widget]) -> Widget) -> Widget
-drawTree d (T f ts) = f (d, map (drawTree (nextCtx d)) ts)
+drawTree :: RenderState -> Tree ((RenderState, [Widget]) -> Widget) -> Widget
+drawTree d (T f ts) = f (d, map (drawTree (nextState d)) ts)
 
 drawCursor :: Cursor AnnString -> Widget
-drawCursor = drawTree initCtx . stitch . processCursor
+drawCursor = drawTree initState . stitch . processCursor
 
 handleTagEdit :: Event -> Cursor AnnString -> Maybe (Cursor AnnString)
 handleTagEdit (EvKey KEsc _) (cs, C (Editing ed) ls rs) =
